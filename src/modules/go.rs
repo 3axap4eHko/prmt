@@ -19,27 +19,24 @@ impl GoModule {
 impl Module for GoModule {
     fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
         utils::find_upward("go.mod")?;
-        
+
         if context.no_version {
             return Some("go".to_string());
         }
-        
-        let output = Command::new("go")
-            .arg("version")
-            .output()
-            .ok()?;
-        
+
+        let output = Command::new("go").arg("version").output().ok()?;
+
         if !output.status.success() {
             return None;
         }
-        
+
         let version_str = String::from_utf8_lossy(&output.stdout);
         let version = version_str
             .split_whitespace()
             .nth(2)?
             .trim_start_matches("go")
             .to_string();
-        
+
         match format {
             "" | "full" => Some(version),
             "short" => {
@@ -50,9 +47,7 @@ impl Module for GoModule {
                     Some(version)
                 }
             }
-            "major" => {
-                version.split('.').next().map(|s| s.to_string())
-            }
+            "major" => version.split('.').next().map(|s| s.to_string()),
             _ => None,
         }
     }

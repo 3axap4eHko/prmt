@@ -1,0 +1,125 @@
+name: CI
+
+on:
+    push:
+        branches: [master]
+    pull_request:
+        branches: [master]
+
+env:
+    CARGO_TERM_COLOR: always
+    RUST_BACKTRACE: 1
+
+jobs:
+    test:
+        name: Test
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [ubuntu-latest, windows-latest, macos-latest]
+                rust: [stable]
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: ${{ matrix.rust }}
+                  components: rustfmt, clippy
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cargo/registry
+                  key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Cache cargo index
+              uses: actions/cache@v4
+              with:
+                  path: ~/.cargo/git
+                  key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Cache cargo build
+              uses: actions/cache@v4
+              with:
+                  path: target
+                  key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Check formatting
+              run: cargo fmt -- --check
+              if: matrix.rust == 'stable'
+
+            - name: Run clippy
+              run: cargo clippy -- -D warnings
+              if: matrix.rust == 'stable'
+
+            - name: Build
+              run: cargo build --verbose
+
+            - name: Run tests
+              run: cargo test --verbose
+
+            - name: Build release
+              run: cargo build --release --verbose
+
+    msrv:
+        name: Check MSRV
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Install Rust
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: stable
+
+            - name: Check MSRV
+              run: cargo check --verbose
+
+    coverage:
+        name: Code Coverage
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Install Rust stable
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: llvm-tools-preview
+
+            - name: Install cargo-llvm-cov
+              uses: taiki-e/install-action@cargo-llvm-cov
+
+            - name: Generate coverage
+              run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v5
+              with:
+                  token: ${{ secrets.CODECOV_TOKEN }}
+                  files: lcov.info
+                  fail_ci_if_error: false
+
+    bench:
+        name: Benchmarks
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Install Rust stable
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Run benchmarks
+              run: cargo bench --no-run
+
+    security-audit:
+        name: Security Audit
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+
+            - name: Install cargo-audit
+              run: cargo install cargo-audit
+
+            - name: Run security audit
+              run: cargo audit

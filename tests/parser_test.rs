@@ -1,4 +1,4 @@
-use prmt::{parse, Token};
+use prmt::{Token, parse};
 
 #[test]
 fn test_empty_string() {
@@ -100,17 +100,17 @@ fn test_placeholder_all_fields() {
 fn test_multiple_placeholders() {
     let tokens = parse("{path}{git}{rust}");
     assert_eq!(tokens.len(), 3);
-    
+
     match &tokens[0] {
         Token::Placeholder(params) => assert_eq!(params.module, "path"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[1] {
         Token::Placeholder(params) => assert_eq!(params.module, "git"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[2] {
         Token::Placeholder(params) => assert_eq!(params.module, "rust"),
         _ => panic!("Expected placeholder token"),
@@ -121,27 +121,27 @@ fn test_multiple_placeholders() {
 fn test_mixed_text_and_placeholders() {
     let tokens = parse("start {path} middle {git} end");
     assert_eq!(tokens.len(), 5);
-    
+
     match &tokens[0] {
         Token::Text(text) => assert_eq!(text, "start "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[1] {
         Token::Placeholder(params) => assert_eq!(params.module, "path"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[2] {
         Token::Text(text) => assert_eq!(text, " middle "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[3] {
         Token::Placeholder(params) => assert_eq!(params.module, "git"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[4] {
         Token::Text(text) => assert_eq!(text, " end"),
         _ => panic!("Expected text token"),
@@ -152,37 +152,48 @@ fn test_mixed_text_and_placeholders() {
 fn test_escape_sequences() {
     // Test escaped braces
     let tokens = parse("\\{not a placeholder\\}");
-    let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_ref(),
-        _ => panic!("Expected text token"),
-    }).collect::<String>();
+    let text = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(s) => s.as_ref(),
+            _ => panic!("Expected text token"),
+        })
+        .collect::<String>();
     assert_eq!(text, "{not a placeholder}");
-    
+
     // Test escaped colon
     let tokens = parse("time\\: 12\\:30");
-    let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_ref(),
-        _ => panic!("Expected text token"),
-    }).collect::<String>();
+    let text = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(s) => s.as_ref(),
+            _ => panic!("Expected text token"),
+        })
+        .collect::<String>();
     assert_eq!(text, "time: 12:30");
-    
+
     // Test escaped backslash
     let tokens = parse("path\\\\to\\\\file");
-    let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_ref(),
-        _ => panic!("Expected text token"),
-    }).collect::<String>();
+    let text = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(s) => s.as_ref(),
+            _ => panic!("Expected text token"),
+        })
+        .collect::<String>();
     assert_eq!(text, "path\\to\\file");
-    
+
     // Test newline and tab
     let tokens = parse("line1\\nline2\\ttab");
-    let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_ref(),
-        _ => panic!("Expected text token"),
-    }).collect::<String>();
+    let text = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(s) => s.as_ref(),
+            _ => panic!("Expected text token"),
+        })
+        .collect::<String>();
     assert_eq!(text, "line1\nline2\ttab");
 }
-
 
 #[test]
 fn test_special_characters_in_fields() {
@@ -195,7 +206,7 @@ fn test_special_characters_in_fields() {
         }
         _ => panic!("Expected placeholder token"),
     }
-    
+
     // Test spaces in prefix/suffix
     let tokens = parse("{module::: on : }");
     match &tokens[0] {
@@ -205,7 +216,7 @@ fn test_special_characters_in_fields() {
         }
         _ => panic!("Expected placeholder token"),
     }
-    
+
     // Test symbols as format (for ok/fail modules)
     let tokens = parse("{ok::✓}");
     match &tokens[0] {
@@ -226,7 +237,7 @@ fn test_complex_styles() {
         }
         _ => panic!("Expected placeholder token"),
     }
-    
+
     let tokens = parse("{module:#ff0000.bold}");
     match &tokens[0] {
         Token::Placeholder(params) => {
@@ -250,7 +261,7 @@ fn test_empty_fields() {
         }
         _ => panic!("Expected placeholder token"),
     }
-    
+
     // Style and format empty, but prefix/suffix present
     let tokens = parse("{module:::A:B}");
     match &tokens[0] {
@@ -283,10 +294,13 @@ fn test_nested_braces_not_allowed() {
 fn test_unclosed_placeholder() {
     // Unclosed placeholder should be treated as text
     let tokens = parse("{unclosed");
-    let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_ref(),
-        _ => panic!("Expected text token"),
-    }).collect::<String>();
+    let text = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(s) => s.as_ref(),
+            _ => panic!("Expected text token"),
+        })
+        .collect::<String>();
     assert_eq!(text, "{unclosed");
 }
 
@@ -294,17 +308,17 @@ fn test_unclosed_placeholder() {
 fn test_consecutive_placeholders() {
     let tokens = parse("{a}{b}{c}");
     assert_eq!(tokens.len(), 3);
-    
+
     match &tokens[0] {
         Token::Placeholder(params) => assert_eq!(params.module, "a"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[1] {
         Token::Placeholder(params) => assert_eq!(params.module, "b"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[2] {
         Token::Placeholder(params) => assert_eq!(params.module, "c"),
         _ => panic!("Expected placeholder token"),
@@ -316,11 +330,11 @@ fn test_real_world_formats() {
     // Common prompt format
     let tokens = parse("{path:cyan} {git:purple} {rust:red}");
     assert_eq!(tokens.len(), 5);
-    
+
     // With prefix/suffix
     let tokens = parse("{ok:green:✓:[:]} {fail:red:✗:[:]}");
     assert_eq!(tokens.len(), 3);
-    
+
     // Complex format
     let tokens = parse("{path:blue.bold:tilde} on {git:yellow::🌿 :} {rust:::v:}");
     assert!(!tokens.is_empty());
@@ -329,12 +343,12 @@ fn test_real_world_formats() {
 #[test]
 fn test_whitespace_preservation() {
     let tokens = parse("  spaces  {module}  more spaces  ");
-    
+
     match &tokens[0] {
         Token::Text(text) => assert_eq!(text, "  spaces  "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[2] {
         Token::Text(text) => assert_eq!(text, "  more spaces  "),
         _ => panic!("Expected text token"),
@@ -345,12 +359,12 @@ fn test_whitespace_preservation() {
 fn test_colon_in_text() {
     // Colons outside placeholders should be preserved
     let tokens = parse("time: {module} at: location");
-    
+
     match &tokens[0] {
         Token::Text(text) => assert_eq!(text, "time: "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[2] {
         Token::Text(text) => assert_eq!(text, " at: location"),
         _ => panic!("Expected text token"),

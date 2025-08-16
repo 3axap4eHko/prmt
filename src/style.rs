@@ -52,11 +52,11 @@ pub struct AnsiStyle {
 impl ModuleStyle for AnsiStyle {
     fn parse(style_str: &str) -> Result<Self, String> {
         let mut style = AnsiStyle::default();
-        
+
         if style_str.is_empty() {
             return Ok(style);
         }
-        
+
         for part in style_str.split('.') {
             match part {
                 "bold" => style.bold = true,
@@ -79,23 +79,35 @@ impl ModuleStyle for AnsiStyle {
                 _ => return Err(format!("Unknown style component: {}", part)),
             }
         }
-        
+
         Ok(style)
     }
-    
+
     fn apply(&self, text: &str) -> String {
         let mut codes = Vec::new();
-        
+
         if let Some(ref color) = self.color {
             codes.push(color.to_ansi_code());
         }
-        if self.bold { codes.push("\x1b[1m".to_string()); }
-        if self.dim { codes.push("\x1b[2m".to_string()); }
-        if self.italic { codes.push("\x1b[3m".to_string()); }
-        if self.underline { codes.push("\x1b[4m".to_string()); }
-        if self.reverse { codes.push("\x1b[7m".to_string()); }
-        if self.strikethrough { codes.push("\x1b[9m".to_string()); }
-        
+        if self.bold {
+            codes.push("\x1b[1m".to_string());
+        }
+        if self.dim {
+            codes.push("\x1b[2m".to_string());
+        }
+        if self.italic {
+            codes.push("\x1b[3m".to_string());
+        }
+        if self.underline {
+            codes.push("\x1b[4m".to_string());
+        }
+        if self.reverse {
+            codes.push("\x1b[7m".to_string());
+        }
+        if self.strikethrough {
+            codes.push("\x1b[9m".to_string());
+        }
+
         if codes.is_empty() {
             text.to_string()
         } else {
@@ -106,32 +118,32 @@ impl ModuleStyle for AnsiStyle {
 
 fn parse_hex_color(hex: &str) -> Result<(u8, u8, u8), String> {
     let hex = hex.trim_start_matches('#');
-    
+
     if hex.len() != 6 {
         return Err(format!("Invalid hex color: {}", hex));
     }
-    
-    let r = u8::from_str_radix(&hex[0..2], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
-    let g = u8::from_str_radix(&hex[2..4], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
-    let b = u8::from_str_radix(&hex[4..6], 16)
-        .map_err(|_| format!("Invalid hex color: {}", hex))?;
-    
+
+    let r =
+        u8::from_str_radix(&hex[0..2], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let g =
+        u8::from_str_radix(&hex[2..4], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+    let b =
+        u8::from_str_radix(&hex[4..6], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
+
     Ok((r, g, b))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_parse_simple_color() {
         let style = AnsiStyle::parse("red").unwrap();
         assert_eq!(style.color, Some(Color::Red));
         assert!(!style.bold);
     }
-    
+
     #[test]
     fn test_parse_color_with_modifiers() {
         let style = AnsiStyle::parse("cyan.bold.italic").unwrap();
@@ -139,13 +151,13 @@ mod tests {
         assert!(style.bold);
         assert!(style.italic);
     }
-    
+
     #[test]
     fn test_parse_hex_color() {
         let style = AnsiStyle::parse("#00ff00").unwrap();
         assert!(matches!(style.color, Some(Color::Hex(_))));
     }
-    
+
     #[test]
     fn test_apply_style() {
         let style = AnsiStyle::parse("red.bold").unwrap();
@@ -154,7 +166,7 @@ mod tests {
         assert!(result.contains("\x1b[1m"));
         assert!(result.ends_with("test\x1b[0m"));
     }
-    
+
     #[test]
     fn test_empty_style() {
         let style = AnsiStyle::parse("").unwrap();

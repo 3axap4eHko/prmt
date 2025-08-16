@@ -1,0 +1,32 @@
+name: Fuzz Testing
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+jobs:
+  fuzz:
+    name: Fuzz Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+      
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+      
+      - name: Run parser fuzzer
+        run: |
+          cd fuzz
+          cargo fuzz run fuzz_parser -- -max_total_time=300
+        continue-on-error: true
+      
+      - name: Run renderer fuzzer
+        run: |
+          cd fuzz
+          cargo fuzz run fuzz_renderer -- -max_total_time=300
+        continue-on-error: true

@@ -18,11 +18,11 @@ impl<T: Clone> CacheEntry<T> {
             ttl,
         }
     }
-    
+
     fn is_valid(&self) -> bool {
         self.timestamp.elapsed() < self.ttl
     }
-    
+
     fn get(&self) -> Option<T> {
         if self.is_valid() {
             Some(self.value.clone())
@@ -48,12 +48,12 @@ impl VersionCache {
             entries: RwLock::new(HashMap::new()),
         }
     }
-    
+
     pub fn get(&self, key: &str) -> Option<Option<String>> {
         let entries = self.entries.read().ok()?;
         entries.get(key)?.get()
     }
-    
+
     pub fn insert(&self, key: String, value: Option<String>, ttl: Duration) {
         if let Ok(mut entries) = self.entries.write() {
             entries.insert(key, CacheEntry::new(value, ttl));
@@ -87,12 +87,12 @@ impl GitCache {
             entries: RwLock::new(HashMap::new()),
         }
     }
-    
+
     pub fn get(&self, path: &Path) -> Option<GitInfo> {
         let entries = self.entries.read().ok()?;
         entries.get(path)?.get()
     }
-    
+
     pub fn insert(&self, path: PathBuf, info: GitInfo) {
         if let Ok(mut entries) = self.entries.write() {
             // Git info cached for 1 second (frequent prompt refreshes)
@@ -102,4 +102,3 @@ impl GitCache {
 }
 
 pub static GIT_CACHE: Lazy<GitCache> = Lazy::new(GitCache::new);
-

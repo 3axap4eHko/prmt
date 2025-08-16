@@ -1,4 +1,4 @@
-use prmt::{parse, execute, Token};
+use prmt::{Token, execute, parse};
 use std::env;
 
 #[test]
@@ -24,7 +24,7 @@ fn test_ok_fail_modules() {
     // Test with exit code 0 (ok) - use : to disable default styles
     let result = execute("{ok:}{fail:}", true, Some(0)).expect("Failed to execute");
     assert_eq!(result, "❯"); // Only ok should show
-    
+
     // Test with exit code 1 (fail) - use : to disable default styles
     let result = execute("{ok:}{fail:}", true, Some(1)).expect("Failed to execute");
     assert_eq!(result, "❯"); // Only fail should show
@@ -64,7 +64,7 @@ fn test_styles() {
         "{path:blue.bold}",
         "{rust:red}",
     ];
-    
+
     for format in formats {
         let result = execute(format, true, None);
         assert!(result.is_ok(), "Failed to parse: {}", format);
@@ -74,12 +74,8 @@ fn test_styles() {
 #[test]
 fn test_prefix_suffix() {
     // Test prefix and suffix
-    let formats = vec![
-        "{path:::before:after}",
-        "{git:::>>>:<<<}",
-        "{ok:::[:]}",
-    ];
-    
+    let formats = vec!["{path:::before:after}", "{git:::>>>:<<<}", "{ok:::[:]}"];
+
     for format in formats {
         let result = execute(format, true, None);
         assert!(result.is_ok(), "Failed to parse: {}", format);
@@ -100,11 +96,11 @@ fn test_custom_symbols() {
     // Test ok with custom symbol - use : to disable default styles
     let result = execute("{ok::✓}", true, Some(0)).expect("Failed to execute");
     assert_eq!(result, "✓");
-    
+
     // Test fail with custom symbol - use : to disable default styles
     let result = execute("{fail::✗}", true, Some(1)).expect("Failed to execute");
     assert_eq!(result, "✗");
-    
+
     // Test fail with code format
     let result = execute("{fail::code}", true, Some(42)).expect("Failed to execute");
     assert_eq!(result, "42");
@@ -120,24 +116,24 @@ fn test_path_formats() {
     let result_short = execute("{path::short}", true, None).expect("Failed to execute");
     let result_short_s = execute("{path::s}", true, None).expect("Failed to execute");
     let result_default = execute("{path}", true, None).expect("Failed to execute");
-    
+
     // Short should be basename only
     let current_dir = env::current_dir().unwrap();
     let basename = current_dir.file_name().unwrap().to_str().unwrap();
     assert_eq!(result_short, basename);
     assert_eq!(result_short_s, basename);
     assert_eq!(result_short, result_short_s); // Short and alias should match
-    
+
     // Relative formats should contain ~ if in home directory, or the basename
     assert!(result_relative.contains(basename) || result_relative.contains("~"));
     assert_eq!(result_relative, result_relative_r); // Short and long forms should match
     assert_eq!(result_relative, result_default); // Default should be relative
-    
+
     // Absolute formats should never contain ~ and should always contain the basename
     assert!(!result_absolute.contains("~"));
     assert!(result_absolute.contains(basename));
     assert_eq!(result_absolute, result_absolute_a); // Short and long forms should match
-    
+
     // Absolute should be different from relative if in home directory
     if result_relative.contains("~") {
         assert_ne!(result_absolute, result_relative);
@@ -148,7 +144,7 @@ fn test_path_formats() {
 fn test_parser_tokens() {
     // Test that parser produces correct tokens
     let tokens = parse("{path:cyan:short:[:]}");
-    
+
     match &tokens[0] {
         Token::Placeholder(params) => {
             assert_eq!(params.module, "path");
@@ -165,10 +161,13 @@ fn test_parser_tokens() {
 fn test_parser_escapes() {
     let tokens = parse("\\{not\\:placeholder\\}");
     // The parser may produce multiple text tokens due to escape processing
-    let combined: String = tokens.iter().map(|t| match t {
-        Token::Text(text) => text.clone(),
-        _ => panic!("Expected only text tokens"),
-    }).collect();
+    let combined: String = tokens
+        .iter()
+        .map(|t| match t {
+            Token::Text(text) => text.clone(),
+            _ => panic!("Expected only text tokens"),
+        })
+        .collect();
     assert_eq!(combined, "{not:placeholder}");
 }
 
@@ -176,27 +175,27 @@ fn test_parser_escapes() {
 fn test_mixed_text_placeholders() {
     let tokens = parse("text {path} more {git} end");
     assert_eq!(tokens.len(), 5);
-    
+
     match &tokens[0] {
         Token::Text(text) => assert_eq!(text, "text "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[1] {
         Token::Placeholder(params) => assert_eq!(params.module, "path"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[2] {
         Token::Text(text) => assert_eq!(text, " more "),
         _ => panic!("Expected text token"),
     }
-    
+
     match &tokens[3] {
         Token::Placeholder(params) => assert_eq!(params.module, "git"),
         _ => panic!("Expected placeholder token"),
     }
-    
+
     match &tokens[4] {
         Token::Text(text) => assert_eq!(text, " end"),
         _ => panic!("Expected text token"),
