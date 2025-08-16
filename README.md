@@ -48,6 +48,9 @@ Ultra-fast, customizable shell prompt generator written in Rust. Features zero-c
 ## Installation
 
 ```bash
+# Install from crates.io
+cargo install prmt
+
 # Build from source (Rust 2024 edition required)
 cargo build --release
 cp target/release/prmt ~/.local/bin/
