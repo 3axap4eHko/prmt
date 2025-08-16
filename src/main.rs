@@ -1,7 +1,8 @@
 use clap::Parser;
 use std::env;
-use std::process;
+use std::process::ExitCode;
 use std::time::Instant;
+use anyhow::Result;
 
 mod module_trait;
 mod style;
@@ -9,6 +10,8 @@ mod registry;
 mod parser;
 mod executor;
 mod modules;
+mod cache;
+mod error;
 
 #[derive(Parser)]
 #[command(name = "prmt")]
@@ -33,7 +36,7 @@ struct Cli {
     code: Option<i32>,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let cli = Cli::parse();
     
     let format = cli.format
@@ -48,15 +51,18 @@ fn main() {
     };
     
     match result {
-        Ok(output) => print!("{}", output),
+        Ok(output) => {
+            print!("{}", output);
+            ExitCode::SUCCESS
+        }
         Err(e) => {
             eprintln!("Error: {}", e);
-            process::exit(1);
+            ExitCode::FAILURE
         }
     }
 }
 
-fn handle_format(format: &str, no_version: bool, debug: bool, exit_code: Option<i32>) -> Result<String, String> {
+fn handle_format(format: &str, no_version: bool, debug: bool, exit_code: Option<i32>) -> Result<String> {
     if debug {
         let start = Instant::now();
         let output = executor::execute(format, no_version, exit_code)?;
@@ -68,15 +74,17 @@ fn handle_format(format: &str, no_version: bool, debug: bool, exit_code: Option<
         Ok(output)
     } else {
         executor::execute(format, no_version, exit_code)
+            .map_err(|e| anyhow::anyhow!(e))
     }
 }
 
-fn handle_bench(format: &str, no_version: bool, exit_code: Option<i32>) -> Result<String, String> {
+fn handle_bench(format: &str, no_version: bool, exit_code: Option<i32>) -> Result<String> {
     let mut times = Vec::new();
     
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code)?;
+        let _ = executor::execute(format, no_version, exit_code)
+            .map_err(|e| anyhow::anyhow!(e))?;
         times.push(start.elapsed());
     }
     

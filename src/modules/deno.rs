@@ -4,6 +4,12 @@ use std::process::Command;
 
 pub struct DenoModule;
 
+impl Default for DenoModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DenoModule {
     pub fn new() -> Self {
         Self

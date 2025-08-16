@@ -19,6 +19,14 @@ path = "src/lib.rs"
 name = "prmt"
 path = "src/main.rs"
 
+[[bench]]
+name = "prompt_bench"
+harness = false
+
+[[bench]]
+name = "comprehensive_bench"
+harness = false
+
 [dependencies]
 clap = { version = "4", features = ["derive", "env"] }
 colored = "2"
@@ -26,6 +34,12 @@ gix = { version = "0.64", default-features = false, features = ["max-performance
 rayon = "1"
 dirs = "5"
 memchr = "2"
+atty = "0.2"
+once_cell = "1"
+thiserror = "2"
+anyhow = "1"
+unicode-width = "0.2"
+bitflags = "2"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -36,5 +50,3 @@ codegen-units = 1
 opt-level = 3
 strip = true
 panic = "abort"
-
-

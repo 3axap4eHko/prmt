@@ -4,6 +4,12 @@ use std::process::Command;
 
 pub struct PythonModule;
 
+impl Default for PythonModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PythonModule {
     pub fn new() -> Self {
         Self

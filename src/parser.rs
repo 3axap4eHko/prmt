@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use memchr;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Params {
@@ -11,8 +10,8 @@ pub struct Params {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
-    Text(String),
+pub enum Token<'a> {
+    Text(Cow<'a, str>),
     Placeholder(Params),
 }
 
@@ -43,13 +42,13 @@ impl<'a> Parser<'a> {
         &self.bytes[self.pos..]
     }
     
-    pub fn parse(mut self) -> Vec<Token> {
+    pub fn parse(mut self) -> Vec<Token<'a>> {
         // Pre-allocate capacity based on open brace count
         let open_count = memchr::memchr_iter(b'{', self.bytes).count();
         
         let capacity = if open_count == 0 {
             1  // Pure text, single token
-        } else if self.bytes.get(0) != Some(&b'{') {
+        } else if self.bytes.first() != Some(&b'{') {
             1 + (open_count * 2)  // Has leading text
         } else {
             open_count * 2  // Starts with placeholder
@@ -62,7 +61,8 @@ impl<'a> Parser<'a> {
         tokens
     }
     
-    fn next_token(&mut self) -> Option<Token> {
+    #[inline]
+    fn next_token(&mut self) -> Option<Token<'a>> {
         if self.pos >= self.bytes.len() {
             return None;
         }
@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
                             b'{' | b'}' | b'\\' | b'n' | b't' | b':' => {
                                 if abs_pos > start {
                                     self.skip_to(abs_pos);
-                                    return Some(Token::Text(self.current_slice(start).to_string()));
+                                    return Some(Token::Text(Cow::Borrowed(self.current_slice(start))));
                                 }
                                 
                                 let escaped = match self.bytes[abs_pos + 1] {
@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
                                     _ => unreachable!(),
                                 };
                                 self.skip_to(abs_pos + 2);
-                                return Some(Token::Text(escaped.to_string()));
+                                return Some(Token::Text(Cow::Borrowed(escaped)));
                             }
                             _ => {
                                 self.skip_to(abs_pos + 2);
@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
                     } else {
                         self.skip_to(self.bytes.len());
                         if start < self.bytes.len() {
-                            return Some(Token::Text(self.current_slice(start).to_string()));
+                            return Some(Token::Text(Cow::Borrowed(self.current_slice(start))));
                         }
                         return None;
                     }
@@ -109,7 +109,7 @@ impl<'a> Parser<'a> {
                 b'{' => {
                     if abs_pos > start {
                         self.skip_to(abs_pos);
-                        return Some(Token::Text(self.current_slice(start).to_string()));
+                        return Some(Token::Text(Cow::Borrowed(self.current_slice(start))));
                     }
                     
                     if let Some(end_offset) = memchr::memchr(b'}', &self.bytes[abs_pos + 1..]) {
@@ -123,22 +123,22 @@ impl<'a> Parser<'a> {
                     }
                     
                     self.skip_to(abs_pos + 1);
-                    return Some(Token::Text("{".to_string()));
+                    return Some(Token::Text(Cow::Borrowed("{")));
                 }
                 b'}' => {
                     if abs_pos > start {
                         self.skip_to(abs_pos);
-                        return Some(Token::Text(self.current_slice(start).to_string()));
+                        return Some(Token::Text(Cow::Borrowed(self.current_slice(start))));
                     }
                     self.skip_to(abs_pos + 1);
-                    return Some(Token::Text("}".to_string()));
+                    return Some(Token::Text(Cow::Borrowed("}")));
                 }
                 _ => unreachable!(),
             }
         } else {
             self.skip_to(self.bytes.len());
             if start < self.bytes.len() {
-                return Some(Token::Text(self.current_slice(start).to_string()));
+                return Some(Token::Text(Cow::Borrowed(self.current_slice(start))));
             }
         }
         
@@ -154,11 +154,11 @@ fn parse_placeholder(content: &str) -> Option<Params> {
     }
     
     Some(Params {
-        module: unescape_if_needed(&fields[0]).into_owned(),
-        style: unescape_if_needed(&fields[1]).into_owned(),
-        format: unescape_if_needed(&fields[2]).into_owned(),
-        prefix: unescape_if_needed(&fields[3]).into_owned(),
-        suffix: unescape_if_needed(&fields[4]).into_owned(),
+        module: unescape_if_needed(fields[0]).into_owned(),
+        style: unescape_if_needed(fields[1]).into_owned(),
+        format: unescape_if_needed(fields[2]).into_owned(),
+        prefix: unescape_if_needed(fields[3]).into_owned(),
+        suffix: unescape_if_needed(fields[4]).into_owned(),
     })
 }
 
@@ -220,7 +220,7 @@ fn unescape_if_needed(s: &str) -> Cow<'_, str> {
     Cow::Owned(result)
 }
 
-pub fn parse(template: &str) -> Vec<Token> {
+pub fn parse(template: &str) -> Vec<Token<'_>> {
     Parser::new(template).parse()
 }
 
@@ -231,7 +231,7 @@ mod tests {
     #[test]
     fn test_simple_text() {
         let tokens = parse("Hello, World!");
-        assert_eq!(tokens, vec![Token::Text("Hello, World!".to_string())]);
+        assert_eq!(tokens, vec![Token::Text(Cow::Borrowed("Hello, World!"))]);
     }
     
     #[test]
@@ -278,9 +278,9 @@ mod tests {
     fn test_escaped_braces_in_text() {
         let tokens = parse("\\{not a placeholder\\}");
         assert_eq!(tokens, vec![
-            Token::Text("{".to_string()),
-            Token::Text("not a placeholder".to_string()),
-            Token::Text("}".to_string()),
+            Token::Text(Cow::Borrowed("{")),
+            Token::Text(Cow::Borrowed("not a placeholder")),
+            Token::Text(Cow::Borrowed("}")),
         ]);
     }
     
@@ -288,11 +288,11 @@ mod tests {
     fn test_escape_sequences() {
         let tokens = parse("Line1\\nLine2\\tTabbed");
         assert_eq!(tokens, vec![
-            Token::Text("Line1".to_string()),
-            Token::Text("\n".to_string()),
-            Token::Text("Line2".to_string()),
-            Token::Text("\t".to_string()),
-            Token::Text("Tabbed".to_string()),
+            Token::Text(Cow::Borrowed("Line1")),
+            Token::Text(Cow::Borrowed("\n")),
+            Token::Text(Cow::Borrowed("Line2")),
+            Token::Text(Cow::Borrowed("\t")),
+            Token::Text(Cow::Borrowed("Tabbed")),
         ]);
     }
     
@@ -301,7 +301,7 @@ mod tests {
         let tokens = parse("{unclosed");
         // The parser should treat unclosed placeholders as text
         let combined: String = tokens.iter().map(|t| match t {
-            Token::Text(s) => s.as_str(),
+            Token::Text(s) => s.as_ref(),
             _ => panic!("Expected text token"),
         }).collect();
         assert_eq!(combined, "{unclosed");

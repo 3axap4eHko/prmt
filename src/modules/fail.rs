@@ -2,6 +2,12 @@ use crate::module_trait::{Module, ModuleContext};
 
 pub struct FailModule;
 
+impl Default for FailModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FailModule {
     pub fn new() -> Self {
         Self

@@ -1,13 +1,39 @@
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
+use crate::cache::VERSION_CACHE;
 use std::process::Command;
+use std::time::Duration;
 
 pub struct NodeModule;
+
+impl Default for NodeModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NodeModule {
     pub fn new() -> Self {
         Self
     }
+}
+
+#[cold]
+fn get_node_version() -> Option<String> {
+    let output = Command::new("node")
+        .arg("--version")
+        .output()
+        .ok()?;
+    
+    if !output.status.success() {
+        return None;
+    }
+    
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    Some(version_str
+        .trim()
+        .trim_start_matches('v')
+        .to_string())
 }
 
 impl Module for NodeModule {
@@ -18,20 +44,15 @@ impl Module for NodeModule {
             return Some("node".to_string());
         }
         
-        let output = Command::new("node")
-            .arg("--version")
-            .output()
-            .ok()?;
-        
-        if !output.status.success() {
-            return None;
-        }
-        
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        let version = version_str
-            .trim()
-            .trim_start_matches('v')
-            .to_string();
+        // Check cache first
+        let cache_key = "node_version";
+        let version = if let Some(cached) = VERSION_CACHE.get(cache_key) {
+            cached?
+        } else {
+            let version = get_node_version();
+            VERSION_CACHE.insert(cache_key.to_string(), version.clone(), Duration::from_secs(300));
+            version?
+        };
         
         match format {
             "" | "full" => Some(version),

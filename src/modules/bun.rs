@@ -4,6 +4,12 @@ use std::process::Command;
 
 pub struct BunModule;
 
+impl Default for BunModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BunModule {
     pub fn new() -> Self {
         Self
