@@ -1,8 +1,8 @@
+use crate::cache::{GIT_CACHE, GitInfo};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
-use crate::cache::{GIT_CACHE, GitInfo};
-use std::path::PathBuf;
 use bitflags::bitflags;
+use std::path::PathBuf;
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -30,7 +30,7 @@ impl GitModule {
 #[cold]
 fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
     let mut status = GitStatus::empty();
-    
+
     // Only run git status if not cached
     if let Ok(output) = std::process::Command::new("git")
         .arg("status")
@@ -38,25 +38,26 @@ fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
         .arg("--untracked-files=normal")
         .current_dir(repo_root)
         .output()
-        && output.status.success() {
-            let status_text = String::from_utf8_lossy(&output.stdout);
-            
-            for line in status_text.lines() {
-                if line.starts_with("??") {
-                    status |= GitStatus::UNTRACKED;
-                } else if !line.is_empty() {
-                    let chars: Vec<char> = line.chars().take(2).collect();
-                    if chars.len() >= 2 {
-                        if chars[0] != ' ' && chars[0] != '?' {
-                            status |= GitStatus::STAGED;
-                        }
-                        if chars[1] != ' ' && chars[1] != '?' {
-                            status |= GitStatus::MODIFIED;
-                        }
+        && output.status.success()
+    {
+        let status_text = String::from_utf8_lossy(&output.stdout);
+
+        for line in status_text.lines() {
+            if line.starts_with("??") {
+                status |= GitStatus::UNTRACKED;
+            } else if !line.is_empty() {
+                let chars: Vec<char> = line.chars().take(2).collect();
+                if chars.len() >= 2 {
+                    if chars[0] != ' ' && chars[0] != '?' {
+                        status |= GitStatus::STAGED;
+                    }
+                    if chars[1] != ' ' && chars[1] != '?' {
+                        status |= GitStatus::MODIFIED;
                     }
                 }
             }
         }
+    }
     status
 }
 
@@ -65,43 +66,48 @@ impl Module for GitModule {
         // Fast path: find git directory
         let git_dir = utils::find_upward(".git")?;
         let repo_root = git_dir.parent()?.to_path_buf();
-        
+
         // Check cache first
         if let Some(cached) = GIT_CACHE.get(&repo_root) {
             return match format {
                 "" | "full" => {
                     let mut result = cached.branch.clone();
-                    if cached.has_changes { result.push('*'); }
-                    if cached.has_staged { result.push('+'); }
-                    if cached.has_untracked { result.push('?'); }
+                    if cached.has_changes {
+                        result.push('*');
+                    }
+                    if cached.has_staged {
+                        result.push('+');
+                    }
+                    if cached.has_untracked {
+                        result.push('?');
+                    }
                     Some(result)
                 }
                 "short" => Some(cached.branch),
                 _ => None,
             };
         }
-        
+
         // Open repo with minimal operations
         let repo = gix::open(&repo_root).ok()?;
-        
+
         // Get branch name efficiently
         let branch_name = if let Ok(Some(head_ref)) = repo.head_ref() {
             String::from_utf8(head_ref.name().shorten().to_vec())
                 .unwrap_or_else(|_| "HEAD".to_string())
         } else if let Ok(Some(head_name)) = repo.head_name() {
-            String::from_utf8(head_name.shorten().to_vec())
-                .unwrap_or_else(|_| "HEAD".to_string())
+            String::from_utf8(head_name.shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
         } else {
             "main".to_string()
         };
-        
+
         // Get status info based on format
         let status = match format {
             "" | "full" => get_git_status_slow(&repo_root),
             "short" => GitStatus::empty(),
             _ => return None,
         };
-        
+
         // Cache the result
         let info = GitInfo {
             branch: branch_name.clone(),
@@ -110,14 +116,20 @@ impl Module for GitModule {
             has_untracked: status.contains(GitStatus::UNTRACKED),
         };
         GIT_CACHE.insert(repo_root, info);
-        
+
         // Build result
         match format {
             "" | "full" => {
                 let mut result = branch_name;
-                if status.contains(GitStatus::MODIFIED) { result.push('*'); }
-                if status.contains(GitStatus::STAGED) { result.push('+'); }
-                if status.contains(GitStatus::UNTRACKED) { result.push('?'); }
+                if status.contains(GitStatus::MODIFIED) {
+                    result.push('*');
+                }
+                if status.contains(GitStatus::STAGED) {
+                    result.push('+');
+                }
+                if status.contains(GitStatus::UNTRACKED) {
+                    result.push('?');
+                }
                 Some(result)
             }
             "short" => Some(branch_name),

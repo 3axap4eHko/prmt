@@ -18,26 +18,20 @@ impl BunModule {
 
 impl Module for BunModule {
     fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("bun.lockb")
-            .or_else(|| utils::find_upward("bunfig.toml"))?;
-        
+        utils::find_upward("bun.lockb").or_else(|| utils::find_upward("bunfig.toml"))?;
+
         if context.no_version {
             return Some("bun".to_string());
         }
-        
-        let output = Command::new("bun")
-            .arg("--version")
-            .output()
-            .ok()?;
-        
+
+        let output = Command::new("bun").arg("--version").output().ok()?;
+
         if !output.status.success() {
             return None;
         }
-        
-        let version = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .to_string();
-        
+
+        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
         match format {
             "" | "full" => Some(version),
             "short" => {
@@ -48,9 +42,7 @@ impl Module for BunModule {
                     Some(version)
                 }
             }
-            "major" => {
-                version.split('.').next().map(|s| s.to_string())
-            }
+            "major" => version.split('.').next().map(|s| s.to_string()),
             _ => None,
         }
     }

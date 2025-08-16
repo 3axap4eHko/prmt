@@ -18,22 +18,18 @@ impl DenoModule {
 
 impl Module for DenoModule {
     fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("deno.json")
-            .or_else(|| utils::find_upward("deno.jsonc"))?;
-        
+        utils::find_upward("deno.json").or_else(|| utils::find_upward("deno.jsonc"))?;
+
         if context.no_version {
             return Some("deno".to_string());
         }
-        
-        let output = Command::new("deno")
-            .arg("--version")
-            .output()
-            .ok()?;
-        
+
+        let output = Command::new("deno").arg("--version").output().ok()?;
+
         if !output.status.success() {
             return None;
         }
-        
+
         let version_str = String::from_utf8_lossy(&output.stdout);
         let version = version_str
             .lines()
@@ -41,7 +37,7 @@ impl Module for DenoModule {
             .split_whitespace()
             .nth(1)?
             .to_string();
-        
+
         match format {
             "" | "full" => Some(version),
             "short" => {
@@ -52,9 +48,7 @@ impl Module for DenoModule {
                     Some(version)
                 }
             }
-            "major" => {
-                version.split('.').next().map(|s| s.to_string())
-            }
+            "major" => version.split('.').next().map(|s| s.to_string()),
             _ => None,
         }
     }
