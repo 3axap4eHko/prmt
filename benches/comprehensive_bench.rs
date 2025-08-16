@@ -101,7 +101,7 @@ fn bench_end_to_end_scenarios(c: &mut Criterion) {
         ("minimal", "{path}"),
         ("shell_bash", "\\u{250c}[{path:cyan}]\\n\\u{2514}> "),
         ("shell_fish", "{path:cyan} {git:purple}❯ "),
-        ("shell_zsh", "{path:blue:short} on {git:yellow::🌿:} {rust::$v} "),
+        ("shell_zsh", "{path:blue:short} on {git:yellow::🌿:} {rust} "),
         ("powerline", "{path:cyan::: }{git:purple.bold::: }{ok:green:❯:}{fail:red:❯:}"),
         ("verbose", "{path:cyan:absolute} ({rust:red:full} {node:green:full}) [{git:purple:full}] "),
         ("corporate", "[{path}] <{git:short}> {ok:$:}{fail:$:} "),

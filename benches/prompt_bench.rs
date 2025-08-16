@@ -37,7 +37,7 @@ fn bench_parser(c: &mut Criterion) {
     });
     
     group.bench_function("complex_format", |b| {
-        let format = "{path:cyan} {rust:red:$i $v} {node:green:$i v$v} {git:purple:$v}";
+        let format = "{path:cyan} {rust:red} {node:green} {git:purple}";
         b.iter(|| {
             prmt::parse(black_box(format));
         });

@@ -14,10 +14,9 @@ fn test_basic_format() {
 #[test]
 fn test_git_module() {
     let result = execute("{git}", true, None).expect("Failed to execute");
-    // In a git repo, should show branch name
-    if !result.is_empty() {
-        assert!(result.contains("main") || result.contains("master") || result.contains("HEAD"));
-    }
+    // In a git repo, should show branch name (any non-empty string is valid)
+    // The result might have a * suffix if there are uncommitted changes
+    assert!(!result.is_empty(), "Git module should return a branch name");
 }
 
 #[test]
