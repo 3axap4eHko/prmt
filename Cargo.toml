@@ -1,0 +1,40 @@
+[package]
+name = "prmt"
+version = "0.1.0"
+edition = "2024"
+authors = ["Ivan Zakharchanka <3axap4eHko@gmail.com>"]
+description = "Ultra-fast, customizable shell prompt generator with zero-copy parsing"
+license = "MIT"
+repository = "https://github.com/3axap4eHko/prmt"
+homepage = "https://github.com/3axap4eHko/prmt"
+readme = "README.md"
+keywords = ["prompt", "shell", "terminal", "cli", "performance"]
+categories = ["command-line-utilities", "command-line-interface"]
+
+[lib]
+name = "prmt"
+path = "src/lib.rs"
+
+[[bin]]
+name = "prmt"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+colored = "2"
+gix = { version = "0.64", default-features = false, features = ["max-performance-safe", "revision"] }
+rayon = "1"
+dirs = "5"
+memchr = "2"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+opt-level = 3
+strip = true
+panic = "abort"
+
+
