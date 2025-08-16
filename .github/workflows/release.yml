@@ -69,6 +69,21 @@ jobs:
         with:
           path: artifacts
       
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          for dir in artifacts/*/; do
+            if [ -d "$dir" ]; then
+              asset_name=$(basename "$dir")
+              # Find the binary file (prmt or prmt.exe)
+              binary=$(find "$dir" -type f \( -name "prmt" -o -name "prmt.exe" \) | head -1)
+              if [ -n "$binary" ]; then
+                cp "$binary" "release-assets/${asset_name}"
+              fi
+            fi
+          done
+          ls -la release-assets/
+      
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -77,4 +92,4 @@ jobs:
           gh release create "$tag_name" \
             --title "Release $tag_name" \
             --generate-notes \
-            artifacts/*/*
+            release-assets/*
