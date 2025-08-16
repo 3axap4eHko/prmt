@@ -19,7 +19,8 @@ pub fn render_template(
     let mut output = String::with_capacity(estimate_output_size(template));
 
     // Check for NO_COLOR environment variable
-    let no_color = std::env::var("NO_COLOR").is_ok() || !atty::is(atty::Stream::Stdout);
+    let no_color = std::env::var("NO_COLOR").is_ok()
+        || !is_terminal::IsTerminal::is_terminal(&std::io::stdout());
 
     for token in tokens {
         match token {

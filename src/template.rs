@@ -27,7 +27,8 @@ impl<'a> Template<'a> {
         let mut output = String::with_capacity(self.estimated_size);
 
         // Check for NO_COLOR environment variable
-        let no_color = std::env::var("NO_COLOR").is_ok() || !atty::is(atty::Stream::Stdout);
+        let no_color = std::env::var("NO_COLOR").is_ok()
+            || !is_terminal::IsTerminal::is_terminal(&std::io::stdout());
 
         for token in &self.tokens {
             match token {
