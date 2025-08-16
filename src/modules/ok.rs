@@ -2,6 +2,12 @@ use crate::module_trait::{Module, ModuleContext};
 
 pub struct OkModule;
 
+impl Default for OkModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OkModule {
     pub fn new() -> Self {
         Self

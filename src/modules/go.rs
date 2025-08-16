@@ -4,6 +4,12 @@ use std::process::Command;
 
 pub struct GoModule;
 
+impl Default for GoModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GoModule {
     pub fn new() -> Self {
         Self

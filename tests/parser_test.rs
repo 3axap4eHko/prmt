@@ -153,7 +153,7 @@ fn test_escape_sequences() {
     // Test escaped braces
     let tokens = parse("\\{not a placeholder\\}");
     let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_str(),
+        Token::Text(s) => s.as_ref(),
         _ => panic!("Expected text token"),
     }).collect::<String>();
     assert_eq!(text, "{not a placeholder}");
@@ -161,7 +161,7 @@ fn test_escape_sequences() {
     // Test escaped colon
     let tokens = parse("time\\: 12\\:30");
     let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_str(),
+        Token::Text(s) => s.as_ref(),
         _ => panic!("Expected text token"),
     }).collect::<String>();
     assert_eq!(text, "time: 12:30");
@@ -169,7 +169,7 @@ fn test_escape_sequences() {
     // Test escaped backslash
     let tokens = parse("path\\\\to\\\\file");
     let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_str(),
+        Token::Text(s) => s.as_ref(),
         _ => panic!("Expected text token"),
     }).collect::<String>();
     assert_eq!(text, "path\\to\\file");
@@ -177,7 +177,7 @@ fn test_escape_sequences() {
     // Test newline and tab
     let tokens = parse("line1\\nline2\\ttab");
     let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_str(),
+        Token::Text(s) => s.as_ref(),
         _ => panic!("Expected text token"),
     }).collect::<String>();
     assert_eq!(text, "line1\nline2\ttab");
@@ -284,7 +284,7 @@ fn test_unclosed_placeholder() {
     // Unclosed placeholder should be treated as text
     let tokens = parse("{unclosed");
     let text = tokens.iter().map(|t| match t {
-        Token::Text(s) => s.as_str(),
+        Token::Text(s) => s.as_ref(),
         _ => panic!("Expected text token"),
     }).collect::<String>();
     assert_eq!(text, "{unclosed");
@@ -323,7 +323,7 @@ fn test_real_world_formats() {
     
     // Complex format
     let tokens = parse("{path:blue.bold:tilde} on {git:yellow::🌿 :} {rust:::v:}");
-    assert!(tokens.len() > 0);
+    assert!(!tokens.is_empty());
 }
 
 #[test]

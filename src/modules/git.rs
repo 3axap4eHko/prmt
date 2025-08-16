@@ -1,7 +1,25 @@
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
+use crate::cache::{GIT_CACHE, GitInfo};
+use std::path::PathBuf;
+use bitflags::bitflags;
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    struct GitStatus: u8 {
+        const MODIFIED = 0b001;
+        const STAGED = 0b010;
+        const UNTRACKED = 0b100;
+    }
+}
 
 pub struct GitModule;
+
+impl Default for GitModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GitModule {
     pub fn new() -> Self {
@@ -9,13 +27,64 @@ impl GitModule {
     }
 }
 
+#[cold]
+fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
+    let mut status = GitStatus::empty();
+    
+    // Only run git status if not cached
+    if let Ok(output) = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain=v1")
+        .arg("--untracked-files=normal")
+        .current_dir(repo_root)
+        .output()
+        && output.status.success() {
+            let status_text = String::from_utf8_lossy(&output.stdout);
+            
+            for line in status_text.lines() {
+                if line.starts_with("??") {
+                    status |= GitStatus::UNTRACKED;
+                } else if !line.is_empty() {
+                    let chars: Vec<char> = line.chars().take(2).collect();
+                    if chars.len() >= 2 {
+                        if chars[0] != ' ' && chars[0] != '?' {
+                            status |= GitStatus::STAGED;
+                        }
+                        if chars[1] != ' ' && chars[1] != '?' {
+                            status |= GitStatus::MODIFIED;
+                        }
+                    }
+                }
+            }
+        }
+    status
+}
+
 impl Module for GitModule {
     fn render(&self, format: &str, _context: &ModuleContext) -> Option<String> {
+        // Fast path: find git directory
         let git_dir = utils::find_upward(".git")?;
-        let repo_root = git_dir.parent()?;
+        let repo_root = git_dir.parent()?.to_path_buf();
         
-        let repo = gix::open(repo_root).ok()?;
+        // Check cache first
+        if let Some(cached) = GIT_CACHE.get(&repo_root) {
+            return match format {
+                "" | "full" => {
+                    let mut result = cached.branch.clone();
+                    if cached.has_changes { result.push('*'); }
+                    if cached.has_staged { result.push('+'); }
+                    if cached.has_untracked { result.push('?'); }
+                    Some(result)
+                }
+                "short" => Some(cached.branch),
+                _ => None,
+            };
+        }
         
+        // Open repo with minimal operations
+        let repo = gix::open(&repo_root).ok()?;
+        
+        // Get branch name efficiently
         let branch_name = if let Ok(Some(head_ref)) = repo.head_ref() {
             String::from_utf8(head_ref.name().shorten().to_vec())
                 .unwrap_or_else(|_| "HEAD".to_string())
@@ -26,57 +95,32 @@ impl Module for GitModule {
             "main".to_string()
         };
         
+        // Get status info based on format
+        let status = match format {
+            "" | "full" => get_git_status_slow(&repo_root),
+            "short" => GitStatus::empty(),
+            _ => return None,
+        };
+        
+        // Cache the result
+        let info = GitInfo {
+            branch: branch_name.clone(),
+            has_changes: status.contains(GitStatus::MODIFIED),
+            has_staged: status.contains(GitStatus::STAGED),
+            has_untracked: status.contains(GitStatus::UNTRACKED),
+        };
+        GIT_CACHE.insert(repo_root, info);
+        
+        // Build result
         match format {
             "" | "full" => {
-                let mut result = branch_name.clone();
-                
-                if let Ok(output) = std::process::Command::new("git")
-                    .arg("status")
-                    .arg("--porcelain=v1")
-                    .arg("--untracked-files=normal")
-                    .current_dir(repo_root)
-                    .output()
-                {
-                    if output.status.success() {
-                        let status_text = String::from_utf8_lossy(&output.stdout);
-                        
-                        let mut has_changes = false;
-                        let mut has_staged = false;
-                        let mut has_untracked = false;
-                        
-                        for line in status_text.lines() {
-                            if line.starts_with("??") {
-                                has_untracked = true;
-                            } else if !line.is_empty() {
-                                let chars: Vec<char> = line.chars().take(2).collect();
-                                if chars.len() >= 2 {
-                                    if chars[0] != ' ' && chars[0] != '?' {
-                                        has_staged = true;
-                                    }
-                                    if chars[1] != ' ' && chars[1] != '?' {
-                                        has_changes = true;
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if has_changes {
-                            result.push('*');
-                        }
-                        if has_staged {
-                            result.push('+');
-                        }
-                        if has_untracked {
-                            result.push('?');
-                        }
-                    }
-                }
-                
+                let mut result = branch_name;
+                if status.contains(GitStatus::MODIFIED) { result.push('*'); }
+                if status.contains(GitStatus::STAGED) { result.push('+'); }
+                if status.contains(GitStatus::UNTRACKED) { result.push('?'); }
                 Some(result)
             }
-            "short" => {
-                Some(branch_name)
-            }
+            "short" => Some(branch_name),
             _ => None,
         }
     }
