@@ -68,10 +68,10 @@ jobs:
         steps:
             - uses: actions/checkout@v5
 
-            - name: Install Rust 1.85
+            - name: Install Rust
               uses: dtolnay/rust-toolchain@master
               with:
-                  toolchain: 1.85
+                  toolchain: stable
 
             - name: Check MSRV
               run: cargo check --verbose
