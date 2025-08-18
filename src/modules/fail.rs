@@ -38,10 +38,8 @@ mod tests {
     #[test]
     fn test_fail_on_non_zero_exit_code() {
         let module = FailModule::new();
-        let context = ModuleContext {
-            exit_code: Some(127),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(127);
         let result = module.render("", &context);
         assert_eq!(result, Some("❯".to_string()));
     }
@@ -49,10 +47,8 @@ mod tests {
     #[test]
     fn test_fail_hidden_on_success() {
         let module = FailModule::new();
-        let context = ModuleContext {
-            exit_code: Some(0),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(0);
         let result = module.render("", &context);
         assert_eq!(result, None);
     }
@@ -60,10 +56,8 @@ mod tests {
     #[test]
     fn test_fail_shows_exit_code() {
         let module = FailModule::new();
-        let context = ModuleContext {
-            exit_code: Some(42),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(42);
         let result = module.render("code", &context);
         assert_eq!(result, Some("42".to_string()));
     }
@@ -71,10 +65,8 @@ mod tests {
     #[test]
     fn test_fail_custom_symbol() {
         let module = FailModule::new();
-        let context = ModuleContext {
-            exit_code: Some(1),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(1);
         let result = module.render("✗", &context);
         assert_eq!(result, Some("✗".to_string()));
     }

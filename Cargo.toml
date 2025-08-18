@@ -40,6 +40,7 @@ thiserror = "2"
 anyhow = "1"
 unicode-width = "0.2"
 bitflags = "2"
+chrono = "0.4"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }

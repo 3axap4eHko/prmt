@@ -37,10 +37,8 @@ mod tests {
     #[test]
     fn test_ok_on_zero_exit_code() {
         let module = OkModule::new();
-        let context = ModuleContext {
-            exit_code: Some(0),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(0);
         let result = module.render("", &context);
         assert_eq!(result, Some("❯".to_string()));
     }
@@ -48,10 +46,8 @@ mod tests {
     #[test]
     fn test_ok_hidden_on_error() {
         let module = OkModule::new();
-        let context = ModuleContext {
-            exit_code: Some(1),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(1);
         let result = module.render("", &context);
         assert_eq!(result, None);
     }
@@ -59,10 +55,8 @@ mod tests {
     #[test]
     fn test_ok_custom_symbol() {
         let module = OkModule::new();
-        let context = ModuleContext {
-            exit_code: Some(0),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(0);
         let result = module.render("✓", &context);
         assert_eq!(result, Some("✓".to_string()));
     }
@@ -70,10 +64,8 @@ mod tests {
     #[test]
     fn test_ok_code_format() {
         let module = OkModule::new();
-        let context = ModuleContext {
-            exit_code: Some(0),
-            no_version: false,
-        };
+        let mut context = ModuleContext::default();
+        context.exit_code = Some(0);
         let result = module.render("code", &context);
         assert_eq!(result, Some("0".to_string()));
     }
