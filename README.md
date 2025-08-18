@@ -94,6 +94,7 @@ prmt --version
 | `deno` | `deno.json`, `deno.jsonc` | Deno version |
 | `bun` | `bun.lockb` | Bun version |
 | `go` | `go.mod` | Go version |
+| `time` | Always active | Current time in various formats |
 
 ### Type Values
 
@@ -115,6 +116,12 @@ prmt --version
 - `full` - Default symbol (❯)
 - `code` - Shows the actual exit code number
 - *Any other string* - Uses that string as the symbol (e.g., `{ok::✓}` shows ✓)
+
+**Time module**:
+- `24h` - 24-hour format HH:MM (default)
+- `24hs` or `24HS` - 24-hour format with seconds HH:MM:SS
+- `12h` or `12H` - 12-hour format hh:MMAM/PM
+- `12hs` or `12HS` - 12-hour format with seconds hh:MM:SSAM/PM
 
 ### Type Validation
 
@@ -149,6 +156,7 @@ prmt '{git::major}'
 | `go` | cyan | Yes |
 | `deno` | - | Yes |
 | `bun` | - | Yes |
+| `time` | - | Yes |
 
 ### Styles
 
@@ -221,6 +229,13 @@ prmt --code $? '{path} {ok::✓} {fail::✗}'
 prmt --code $? '{path} {ok::❯} {fail::code}'
 # Output (success): ~/projects ❯
 # Output (failure with code 127): ~/projects 127
+
+# Time formats
+prmt '{time}'                     # 14:30 (default 24h)
+prmt '{time::24hs}'               # 14:30:45
+prmt '{time::12h}'                # 02:30PM
+prmt '{time::12hs}'               # 02:30:45PM
+prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 ```
 
 ## Shell Integration
