@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 
 pub struct OkModule;
@@ -15,9 +16,9 @@ impl OkModule {
 }
 
 impl Module for OkModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         if context.exit_code != Some(0) {
-            return None;
+            return Ok(None);
         }
 
         let symbol = match format {
@@ -26,7 +27,7 @@ impl Module for OkModule {
             custom => custom,
         };
 
-        Some(symbol.to_string())
+        Ok(Some(symbol.to_string()))
     }
 }
 
@@ -39,7 +40,7 @@ mod tests {
         let module = OkModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(0);
-        let result = module.render("", &context);
+        let result = module.render("", &context).unwrap();
         assert_eq!(result, Some("❯".to_string()));
     }
 
@@ -48,7 +49,7 @@ mod tests {
         let module = OkModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(1);
-        let result = module.render("", &context);
+        let result = module.render("", &context).unwrap();
         assert_eq!(result, None);
     }
 
@@ -57,7 +58,7 @@ mod tests {
         let module = OkModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(0);
-        let result = module.render("✓", &context);
+        let result = module.render("✓", &context).unwrap();
         assert_eq!(result, Some("✓".to_string()));
     }
 
@@ -66,7 +67,7 @@ mod tests {
         let module = OkModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(0);
-        let result = module.render("code", &context);
+        let result = module.render("code", &context).unwrap();
         assert_eq!(result, Some("0".to_string()));
     }
 }

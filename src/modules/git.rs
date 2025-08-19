@@ -1,4 +1,5 @@
 use crate::cache::{GIT_CACHE, GitInfo};
+use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use bitflags::bitflags;
@@ -61,16 +62,37 @@ fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
     status
 }
 
+fn validate_git_format(format: &str) -> Result<&str> {
+    match format {
+        "" | "full" | "f" => Ok("full"),
+        "short" | "s" => Ok("short"),
+        _ => Err(PromptError::InvalidFormat {
+            module: "git".to_string(),
+            format: format.to_string(),
+            valid_formats: "full, f, short, s".to_string(),
+        }),
+    }
+}
+
 impl Module for GitModule {
-    fn render(&self, format: &str, _context: &ModuleContext) -> Option<String> {
+    fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
+        // Validate format first
+        let normalized_format = validate_git_format(format)?;
+
         // Fast path: find git directory
-        let git_dir = utils::find_upward(".git")?;
-        let repo_root = git_dir.parent()?.to_path_buf();
+        let git_dir = match utils::find_upward(".git") {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+        let repo_root = match git_dir.parent() {
+            Some(p) => p.to_path_buf(),
+            None => return Ok(None),
+        };
 
         // Check cache first
         if let Some(cached) = GIT_CACHE.get(&repo_root) {
-            return match format {
-                "" | "full" => {
+            return Ok(match normalized_format {
+                "full" => {
                     let mut result = cached.branch.clone();
                     if cached.has_changes {
                         result.push('*');
@@ -84,12 +106,15 @@ impl Module for GitModule {
                     Some(result)
                 }
                 "short" => Some(cached.branch),
-                _ => None,
-            };
+                _ => unreachable!("validate_git_format should have caught this"),
+            });
         }
 
         // Open repo with minimal operations
-        let repo = gix::open(&repo_root).ok()?;
+        let repo = match gix::open(&repo_root) {
+            Ok(r) => r,
+            Err(_) => return Ok(None),
+        };
 
         // Get branch name efficiently
         let branch_name = if let Ok(Some(head_ref)) = repo.head_ref() {
@@ -102,10 +127,10 @@ impl Module for GitModule {
         };
 
         // Get status info based on format
-        let status = match format {
-            "" | "full" => get_git_status_slow(&repo_root),
+        let status = match normalized_format {
+            "full" => get_git_status_slow(&repo_root),
             "short" => GitStatus::empty(),
-            _ => return None,
+            _ => unreachable!("validate_git_format should have caught this"),
         };
 
         // Cache the result
@@ -118,8 +143,8 @@ impl Module for GitModule {
         GIT_CACHE.insert(repo_root, info);
 
         // Build result
-        match format {
-            "" | "full" => {
+        Ok(match normalized_format {
+            "full" => {
                 let mut result = branch_name;
                 if status.contains(GitStatus::MODIFIED) {
                     result.push('*');
@@ -133,7 +158,7 @@ impl Module for GitModule {
                 Some(result)
             }
             "short" => Some(branch_name),
-            _ => None,
-        }
+            _ => unreachable!("validate_git_format should have caught this"),
+        })
     }
 }

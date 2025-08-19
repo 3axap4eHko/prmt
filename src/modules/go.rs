@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -17,38 +18,41 @@ impl GoModule {
 }
 
 impl Module for GoModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("go.mod")?;
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
+        if utils::find_upward("go.mod").is_none() {
+            return Ok(None);
+        }
 
         if context.no_version {
-            return Some("go".to_string());
+            return Ok(Some("go".to_string()));
         }
 
-        let output = Command::new("go").arg("version").output().ok()?;
+        // Validate and normalize format
+        let normalized_format = utils::validate_version_format(format, "go")?;
 
-        if !output.status.success() {
-            return None;
-        }
+        let output = match Command::new("go").arg("version").output() {
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(None),
+        };
 
         let version_str = String::from_utf8_lossy(&output.stdout);
-        let version = version_str
-            .split_whitespace()
-            .nth(2)?
-            .trim_start_matches("go")
-            .to_string();
+        let version = match version_str.split_whitespace().nth(2) {
+            Some(v) => v.trim_start_matches("go").to_string(),
+            None => return Ok(None),
+        };
 
-        match format {
-            "" | "full" => Some(version),
+        match normalized_format {
+            "full" => Ok(Some(version)),
             "short" => {
                 let parts: Vec<&str> = version.split('.').collect();
                 if parts.len() >= 2 {
-                    Some(format!("{}.{}", parts[0], parts[1]))
+                    Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Some(version)
+                    Ok(Some(version))
                 }
             }
-            "major" => version.split('.').next().map(|s| s.to_string()),
-            _ => None,
+            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            _ => unreachable!("validate_version_format should have caught this"),
         }
     }
 }

@@ -8,6 +8,13 @@ pub enum PromptError {
     #[error("Style error for module '{module}': {error}")]
     StyleError { module: String, error: String },
 
+    #[error("Invalid format '{format}' for module '{module}'. Valid formats: {valid_formats}")]
+    InvalidFormat {
+        module: String,
+        format: String,
+        valid_formats: String,
+    },
+
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 

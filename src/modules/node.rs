@@ -1,4 +1,5 @@
 use crate::cache::VERSION_CACHE;
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -31,17 +32,25 @@ fn get_node_version() -> Option<String> {
 }
 
 impl Module for NodeModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("package.json")?;
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
+        if utils::find_upward("package.json").is_none() {
+            return Ok(None);
+        }
 
         if context.no_version {
-            return Some("node".to_string());
+            return Ok(Some("node".to_string()));
         }
+
+        // Validate and normalize format
+        let normalized_format = utils::validate_version_format(format, "node")?;
 
         // Check cache first
         let cache_key = "node_version";
         let version = if let Some(cached) = VERSION_CACHE.get(cache_key) {
-            cached?
+            match cached {
+                Some(v) => v,
+                None => return Ok(None),
+            }
         } else {
             let version = get_node_version();
             VERSION_CACHE.insert(
@@ -49,21 +58,24 @@ impl Module for NodeModule {
                 version.clone(),
                 Duration::from_secs(300),
             );
-            version?
+            match version {
+                Some(v) => v,
+                None => return Ok(None),
+            }
         };
 
-        match format {
-            "" | "full" => Some(version),
+        match normalized_format {
+            "full" => Ok(Some(version)),
             "short" => {
                 let parts: Vec<&str> = version.split('.').collect();
                 if parts.len() >= 2 {
-                    Some(format!("{}.{}", parts[0], parts[1]))
+                    Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Some(version)
+                    Ok(Some(version))
                 }
             }
-            "major" => version.split('.').next().map(|s| s.to_string()),
-            _ => None,
+            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            _ => unreachable!("validate_version_format should have caught this"),
         }
     }
 }
