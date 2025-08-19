@@ -146,7 +146,7 @@ fn bench_end_to_end_scenarios(c: &mut Criterion) {
 
     for (name, format) in scenarios {
         group.bench_with_input(BenchmarkId::from_parameter(name), &format, |b, &format| {
-            b.iter(|| execute(black_box(format), true, Some(0)));
+            b.iter(|| execute(black_box(format), true, Some(0), false));
         });
     }
 
