@@ -140,7 +140,11 @@ mod tests {
 
         for format in unknown_formats {
             let result = module.render(format, &context);
-            assert!(result.is_err(), "Unknown format '{}' should return error", format);
+            assert!(
+                result.is_err(),
+                "Unknown format '{}' should return error",
+                format
+            );
         }
     }
 
@@ -156,12 +160,20 @@ mod tests {
             let result = module.render(format, &context);
             assert!(result.is_ok(), "Valid format '{}' should succeed", format);
             let value = result.unwrap();
-            assert!(value.is_some(), "Time module should return Some for valid format: {}", format);
+            assert!(
+                value.is_some(),
+                "Time module should return Some for valid format: {}",
+                format
+            );
         }
 
         for format in invalid_formats {
             let result = module.render(format, &context);
-            assert!(result.is_err(), "Invalid format '{}' should return error", format);
+            assert!(
+                result.is_err(),
+                "Invalid format '{}' should return error",
+                format
+            );
         }
     }
 

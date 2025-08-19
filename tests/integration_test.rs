@@ -109,9 +109,11 @@ fn test_custom_symbols() {
 #[test]
 fn test_path_formats() {
     // Test all path formats
-    let result_relative = execute("{path::relative}", true, None, false).expect("Failed to execute");
+    let result_relative =
+        execute("{path::relative}", true, None, false).expect("Failed to execute");
     let result_relative_r = execute("{path::r}", true, None, false).expect("Failed to execute");
-    let result_absolute = execute("{path::absolute}", true, None, false).expect("Failed to execute");
+    let result_absolute =
+        execute("{path::absolute}", true, None, false).expect("Failed to execute");
     let result_absolute_a = execute("{path::a}", true, None, false).expect("Failed to execute");
     let result_short = execute("{path::short}", true, None, false).expect("Failed to execute");
     let result_short_s = execute("{path::s}", true, None, false).expect("Failed to execute");
