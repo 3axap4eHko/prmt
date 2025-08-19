@@ -3,7 +3,7 @@ use std::env;
 
 #[test]
 fn test_basic_format() {
-    let result = execute("{path}", true, None).expect("Failed to execute");
+    let result = execute("{path}", true, None, false).expect("Failed to execute");
     assert!(!result.is_empty());
     // Should contain current directory name
     let current_dir = env::current_dir().unwrap();
@@ -13,7 +13,7 @@ fn test_basic_format() {
 
 #[test]
 fn test_git_module() {
-    let result = execute("{git}", true, None).expect("Failed to execute");
+    let result = execute("{git}", true, None, false).expect("Failed to execute");
     // In a git repo, should show branch name (any non-empty string is valid)
     // The result might have a * suffix if there are uncommitted changes
     assert!(!result.is_empty(), "Git module should return a branch name");
@@ -22,18 +22,18 @@ fn test_git_module() {
 #[test]
 fn test_ok_fail_modules() {
     // Test with exit code 0 (ok) - use : to disable default styles
-    let result = execute("{ok:}{fail:}", true, Some(0)).expect("Failed to execute");
+    let result = execute("{ok:}{fail:}", true, Some(0), false).expect("Failed to execute");
     assert_eq!(result, "❯"); // Only ok should show
 
     // Test with exit code 1 (fail) - use : to disable default styles
-    let result = execute("{ok:}{fail:}", true, Some(1)).expect("Failed to execute");
+    let result = execute("{ok:}{fail:}", true, Some(1), false).expect("Failed to execute");
     assert_eq!(result, "❯"); // Only fail should show
 }
 
 #[test]
 fn test_new_format_types() {
     // Test short version format
-    let result = execute("{path::short}", true, None).expect("Failed to execute");
+    let result = execute("{path::short}", true, None, false).expect("Failed to execute");
     let current_dir = env::current_dir().unwrap();
     let basename = current_dir.file_name().unwrap().to_str().unwrap();
     assert_eq!(result, basename);
@@ -41,13 +41,13 @@ fn test_new_format_types() {
 
 #[test]
 fn test_escape_sequences() {
-    let result = execute("Line1\\nLine2\\tTab", true, None).expect("Failed to execute");
+    let result = execute("Line1\\nLine2\\tTab", true, None, false).expect("Failed to execute");
     assert_eq!(result, "Line1\nLine2\tTab");
 }
 
 #[test]
 fn test_multiple_modules() {
-    let result = execute("{path} {git}", true, None).expect("Failed to execute");
+    let result = execute("{path} {git}", true, None, false).expect("Failed to execute");
     assert!(!result.is_empty());
     // Should contain both path and git info if available
     let current_dir = env::current_dir().unwrap();
@@ -66,7 +66,7 @@ fn test_styles() {
     ];
 
     for format in formats {
-        let result = execute(format, true, None);
+        let result = execute(format, true, None, false);
         assert!(result.is_ok(), "Failed to parse: {}", format);
     }
 }
@@ -77,14 +77,14 @@ fn test_prefix_suffix() {
     let formats = vec!["{path:::before:after}", "{git:::>>>:<<<}", "{ok:::[:]}"];
 
     for format in formats {
-        let result = execute(format, true, None);
+        let result = execute(format, true, None, false);
         assert!(result.is_ok(), "Failed to parse: {}", format);
     }
 }
 
 #[test]
 fn test_rust_module() {
-    let result = execute("{rust}", false, None).expect("Failed to execute");
+    let result = execute("{rust}", false, None, false).expect("Failed to execute");
     // If in a Rust project, should contain version number
     if !result.is_empty() {
         assert!(result.contains(".") || result == "rust"); // Either version or "rust" if no-version
@@ -94,28 +94,28 @@ fn test_rust_module() {
 #[test]
 fn test_custom_symbols() {
     // Test ok with custom symbol - use : to disable default styles
-    let result = execute("{ok::✓}", true, Some(0)).expect("Failed to execute");
+    let result = execute("{ok::✓}", true, Some(0), false).expect("Failed to execute");
     assert_eq!(result, "✓");
 
     // Test fail with custom symbol - use : to disable default styles
-    let result = execute("{fail::✗}", true, Some(1)).expect("Failed to execute");
+    let result = execute("{fail::✗}", true, Some(1), false).expect("Failed to execute");
     assert_eq!(result, "✗");
 
     // Test fail with code format
-    let result = execute("{fail::code}", true, Some(42)).expect("Failed to execute");
+    let result = execute("{fail::code}", true, Some(42), false).expect("Failed to execute");
     assert_eq!(result, "42");
 }
 
 #[test]
 fn test_path_formats() {
     // Test all path formats
-    let result_relative = execute("{path::relative}", true, None).expect("Failed to execute");
-    let result_relative_r = execute("{path::r}", true, None).expect("Failed to execute");
-    let result_absolute = execute("{path::absolute}", true, None).expect("Failed to execute");
-    let result_absolute_a = execute("{path::a}", true, None).expect("Failed to execute");
-    let result_short = execute("{path::short}", true, None).expect("Failed to execute");
-    let result_short_s = execute("{path::s}", true, None).expect("Failed to execute");
-    let result_default = execute("{path}", true, None).expect("Failed to execute");
+    let result_relative = execute("{path::relative}", true, None, false).expect("Failed to execute");
+    let result_relative_r = execute("{path::r}", true, None, false).expect("Failed to execute");
+    let result_absolute = execute("{path::absolute}", true, None, false).expect("Failed to execute");
+    let result_absolute_a = execute("{path::a}", true, None, false).expect("Failed to execute");
+    let result_short = execute("{path::short}", true, None, false).expect("Failed to execute");
+    let result_short_s = execute("{path::s}", true, None, false).expect("Failed to execute");
+    let result_default = execute("{path}", true, None, false).expect("Failed to execute");
 
     // Short should be basename only
     let current_dir = env::current_dir().unwrap();
