@@ -4,46 +4,22 @@ Ultra-fast, customizable shell prompt generator written in Rust. Features zero-c
 
 ## Features
 
-- **⚡ Blazing Fast**: Sub-microsecond parsing with memchr SIMD optimizations
-- **🔧 Modular Architecture**: Clean separation with Module trait and registry system
-- **🎨 Rich Template Language**: 5-field format with styles, formats, and affixes
-- **📦 Zero-Copy Parsing**: 50-70% reduction in allocations
-- **🦀 Memory Efficient**: Single-pass parser with lazy unescaping
-- **🚀 Parallel Detection**: Module detection runs concurrently via Rayon
-- **🔥 Gitoxide Integration**: 2.9x faster git operations
-- **✨ Smart Rendering**: Conditional display based on context
+- **⚡ Blazing Fast**: Instant prompt rendering that won't slow down your terminal
+- **🎨 Highly Customizable**: Full control over colors, formats, and what information to show
+- **📦 Zero-Copy Parsing**: Efficient memory usage for minimal overhead
+- **🦀 Memory Efficient**: Written in Rust for maximum performance
+- **🚀 Context Aware**: Automatically detects and shows relevant project information
+- **✨ Smart Rendering**: Only shows information when it's relevant to your current directory
 
 ## Performance
 
-### Parser Performance (Template Processing)
-| Template Type | Performance | Improvement |
-|--------------|-------------|-------------|
-| Simple `{path}` | ~0.2 µs | 3.7x faster |
-| Complex (5 modules + styles) | ~1.1 µs | 4.7x faster |
-| Long text (100+ chars) | ~0.1 µs | 7.6x faster |
-| Many placeholders | ~2.0 µs | 3.8x faster |
-
-### End-to-End Performance
+### Actual Response Times
 | Scenario | Time | Notes |
 |----------|------|-------|
 | Path only | ~0.01ms | Minimal prompt |
 | Path + Git | ~1-2ms | Branch and status |
 | With Rust version | ~25-30ms | Includes `rustc --version` |
 | With `--no-version` | <5ms | Skips all version detection |
-
-### Key Optimizations
-
-**Parser (NEW)**:
-- **Zero-copy parsing** - Text sections are slices, not allocations
-- **SIMD scanning** - memchr finds `{`, `}`, `\` in parallel
-- **Lazy unescaping** - Only allocates for fields with backslashes
-- **Single-pass** - No backtracking or re-parsing
-
-**Runtime**:
-- **Gitoxide (gix)** - 2.9x faster than git2 for git operations
-- **Parallel detection** - All modules detected simultaneously via Rayon
-- **Direct execution** - No compilation or caching overhead
-- **Conditional rendering** - Modules only render when conditions met
 
 ## Installation
 
@@ -94,6 +70,7 @@ prmt --version
 | `deno` | `deno.json`, `deno.jsonc` | Deno version |
 | `bun` | `bun.lockb` | Bun version |
 | `go` | `go.mod` | Go version |
+| `time` | Always active | Current time in various formats |
 
 ### Type Values
 
@@ -115,6 +92,12 @@ prmt --version
 - `full` - Default symbol (❯)
 - `code` - Shows the actual exit code number
 - *Any other string* - Uses that string as the symbol (e.g., `{ok::✓}` shows ✓)
+
+**Time module**:
+- `24h` - 24-hour format HH:MM (default)
+- `24hs` or `24HS` - 24-hour format with seconds HH:MM:SS
+- `12h` or `12H` - 12-hour format hh:MMAM/PM
+- `12hs` or `12HS` - 12-hour format with seconds hh:MM:SSAM/PM
 
 ### Type Validation
 
@@ -149,6 +132,7 @@ prmt '{git::major}'
 | `go` | cyan | Yes |
 | `deno` | - | Yes |
 | `bun` | - | Yes |
+| `time` | - | Yes |
 
 ### Styles
 
@@ -221,6 +205,13 @@ prmt --code $? '{path} {ok::✓} {fail::✗}'
 prmt --code $? '{path} {ok::❯} {fail::code}'
 # Output (success): ~/projects ❯
 # Output (failure with code 127): ~/projects 127
+
+# Time formats
+prmt '{time}'                     # 14:30 (default 24h)
+prmt '{time::24hs}'               # 14:30:45
+prmt '{time::12h}'                # 02:30PM
+prmt '{time::12hs}'               # 02:30:45PM
+prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 ```
 
 ## Shell Integration
@@ -289,46 +280,6 @@ OPTIONS:
 ARGS:
     <FORMAT>           Format string (default from PRMT_FORMAT env var)
 ```
-
-## Architecture
-
-### Clean Modular Design
-```
-┌─────────────┐     ┌──────────┐     ┌─────────┐
-│   Parser    │────▶│  Tokens  │────▶│ Executor│
-│  (memchr)   │     │          │     │         │
-└─────────────┘     └──────────┘     └────┬────┘
-                                          │
-                    ┌─────────────────────▼──────────────┐
-                    │          Module Registry           │
-                    │  ┌──────┐ ┌──────┐ ┌──────┐        │
-                    │  │ Path │ │ Git  │ │ Rust │ ...    │
-                    │  └──────┘ └──────┘ └──────┘        │
-                    └────────────────────────────────────┘
-```
-
-### Execution Pipeline
-1. **Parse** - Single-pass, zero-copy template parsing (~1µs)
-2. **Registry Lookup** - O(1) module resolution via HashMap
-3. **Render** - Modules validate and render in parallel
-4. **Style** - ANSI styling applied as final step
-
-### Module System
-All modules implement a simple trait:
-```rust
-pub trait Module: Send + Sync {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String>;
-}
-```
-- Return `Some(text)` to display
-- Return `None` to hide (inactive/error)
-- Validation happens during render (lazy)
-
-### Parser Implementation
-- **memchr3** for SIMD scanning of `{`, `}`, `\`
-- **Zero-copy** text slices for literal sections
-- **Lazy unescaping** with `Cow<str>` for efficiency
-- **Single allocation** for final output string
 
 ## Building from Source
 
