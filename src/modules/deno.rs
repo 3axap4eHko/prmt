@@ -39,7 +39,11 @@ impl Module for DenoModule {
         };
 
         let version_str = String::from_utf8_lossy(&output.stdout);
-        let version = match version_str.lines().next().and_then(|l| l.split_whitespace().nth(1)) {
+        let version = match version_str
+            .lines()
+            .next()
+            .and_then(|l| l.split_whitespace().nth(1))
+        {
             Some(v) => v.to_string(),
             None => return Ok(None),
         };

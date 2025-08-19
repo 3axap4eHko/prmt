@@ -37,7 +37,7 @@ pub fn render_template(
                 {
                     // Build the complete segment (prefix + text + suffix)
                     let mut segment = String::new();
-                    
+
                     if !params.prefix.is_empty() {
                         segment.push_str(&params.prefix);
                     }
@@ -67,7 +67,12 @@ pub fn render_template(
     Ok(output)
 }
 
-pub fn execute(format_str: &str, no_version: bool, exit_code: Option<i32>, no_color: bool) -> Result<String> {
+pub fn execute(
+    format_str: &str,
+    no_version: bool,
+    exit_code: Option<i32>,
+    no_color: bool,
+) -> Result<String> {
     let context = ModuleContext {
         no_version,
         exit_code,

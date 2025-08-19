@@ -87,12 +87,18 @@ fn handle_format(
     }
 }
 
-fn handle_bench(format: &str, no_version: bool, exit_code: Option<i32>, no_color: bool) -> Result<String> {
+fn handle_bench(
+    format: &str,
+    no_version: bool,
+    exit_code: Option<i32>,
+    no_color: bool,
+) -> Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code, no_color).map_err(|e| anyhow::anyhow!(e))?;
+        let _ = executor::execute(format, no_version, exit_code, no_color)
+            .map_err(|e| anyhow::anyhow!(e))?;
         times.push(start.elapsed());
     }
 

@@ -19,11 +19,13 @@ impl Module for TimeModule {
             "12h" | "12H" => now.format("%I:%M%p"),
             "12hs" | "12HS" => now.format("%I:%M:%S%p"),
             "24hs" | "24HS" => now.format("%H:%M:%S"),
-            _ => return Err(PromptError::InvalidFormat {
-                module: "time".to_string(),
-                format: format.to_string(),
-                valid_formats: "24h (default), 12h, 12H, 12hs, 12HS, 24hs, 24HS".to_string(),
-            }),
+            _ => {
+                return Err(PromptError::InvalidFormat {
+                    module: "time".to_string(),
+                    format: format.to_string(),
+                    valid_formats: "24h (default), 12h, 12H, 12hs, 12HS, 24hs, 24HS".to_string(),
+                });
+            }
         };
 
         Ok(Some(formatted.to_string()))
