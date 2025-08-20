@@ -226,6 +226,43 @@ export PRMT_FORMAT="{path:cyan:r} {rust:red:m:🦀 v:} {git:purple}"
 PS1='$(prmt --code $?)\$ '
 ```
 
+### Bash with Transient Prompt
+For a cleaner command history, you can set up a transient prompt that shows a simplified prompt after command execution:
+
+```bash
+# Add to ~/.bashrc or ~/.init_bash
+
+# Helper functions for transient prompt
+function lastcommand {
+    history | tail -1 | cut -c 8-
+}
+
+function deleteprompt {
+    n=${PS1@P}
+    n=${n//[^$'\n']}
+    n=${#n}
+    tput cuu $((n + 1))
+    tput ed
+}
+
+function prompt_indicator {
+    prmt --code ${1:-0} "{ok:#a6e3a1:❯}{fail:#f38ba8:❯}"
+}
+
+# Main prompt with full information
+PS1='$(prmt --code $? "{path:#89dceb}{node:#a6e3a1:f: [:]}{rust:#f38ba8:f: 🦀}{git:#f9e2af:f: }\n{ok:#a6e3a1}{fail:#f38ba8} ")'
+
+# Transient prompt configuration
+PS0='\[$(deleteprompt)\]$(prompt_indicator ${LAST_EXIT_CODE}) $(lastcommand)\n\[${PS1:0:$((EXPS0=1,0))}\]'
+PROMPT_COMMAND='LAST_EXIT_CODE=$?; echo -ne "\033]0;${PWD##*/}\007"; [ "$EXPS0" = 0 ] && deleteprompt && echo -e "$(prompt_indicator ${LAST_EXIT_CODE})" || EXPS0=0'
+```
+
+This configuration:
+- Shows a full prompt with path, version info, and git status before commands
+- After execution, replaces it with a minimal prompt showing just the colored success/fail indicator and the command
+- Maintains colored indicators (green ❯ for success, red ❯ for failure) in the transient prompt
+- Handles edge cases like Ctrl+C and empty Enter presses correctly
+
 ### Zsh
 ```zsh
 # Add to ~/.zshrc
@@ -274,6 +311,7 @@ OPTIONS:
     -d, --debug         Show debug information and timing
     -b, --bench         Run benchmark (100 iterations)
         --code <CODE>   Exit code of the last command (for ok/fail modules)
+        --no-color      Disable colored output
     -h, --help         Print help
     -V, --version      Print version
 

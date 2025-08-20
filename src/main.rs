@@ -34,6 +34,9 @@ struct Cli {
 
     #[arg(long)]
     code: Option<i32>,
+
+    #[arg(long)]
+    no_color: bool,
 }
 
 fn main() -> ExitCode {
@@ -46,9 +49,9 @@ fn main() -> ExitCode {
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 
     let result = if cli.bench {
-        handle_bench(&format, cli.no_version, cli.code)
+        handle_bench(&format, cli.no_version, cli.code, cli.no_color)
     } else {
-        handle_format(&format, cli.no_version, cli.debug, cli.code)
+        handle_format(&format, cli.no_version, cli.debug, cli.code, cli.no_color)
     };
 
     match result {
@@ -68,10 +71,11 @@ fn handle_format(
     no_version: bool,
     debug: bool,
     exit_code: Option<i32>,
+    no_color: bool,
 ) -> Result<String> {
     if debug {
         let start = Instant::now();
-        let output = executor::execute(format, no_version, exit_code)?;
+        let output = executor::execute(format, no_version, exit_code, no_color)?;
         let elapsed = start.elapsed();
 
         eprintln!("Format: {}", format);
@@ -79,16 +83,22 @@ fn handle_format(
 
         Ok(output)
     } else {
-        executor::execute(format, no_version, exit_code).map_err(|e| anyhow::anyhow!(e))
+        executor::execute(format, no_version, exit_code, no_color).map_err(|e| anyhow::anyhow!(e))
     }
 }
 
-fn handle_bench(format: &str, no_version: bool, exit_code: Option<i32>) -> Result<String> {
+fn handle_bench(
+    format: &str,
+    no_version: bool,
+    exit_code: Option<i32>,
+    no_color: bool,
+) -> Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code).map_err(|e| anyhow::anyhow!(e))?;
+        let _ = executor::execute(format, no_version, exit_code, no_color)
+            .map_err(|e| anyhow::anyhow!(e))?;
         times.push(start.elapsed());
     }
 

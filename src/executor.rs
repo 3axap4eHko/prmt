@@ -14,13 +14,13 @@ pub fn render_template(
     template: &str,
     registry: &ModuleRegistry,
     context: &ModuleContext,
+    no_color: bool,
 ) -> Result<String> {
     let tokens = parse(template);
     let mut output = String::with_capacity(estimate_output_size(template));
 
-    // Check for NO_COLOR environment variable
-    let no_color = std::env::var("NO_COLOR").is_ok()
-        || !is_terminal::IsTerminal::is_terminal(&std::io::stdout());
+    // Check for NO_COLOR environment variable (in addition to flag)
+    let no_color = no_color || std::env::var("NO_COLOR").is_ok();
 
     for token in tokens {
         match token {
@@ -32,14 +32,21 @@ pub fn render_template(
                     .get(&params.module)
                     .ok_or_else(|| PromptError::UnknownModule(params.module.clone()))?;
 
-                if let Some(text) = module.render(&params.format, context)
+                if let Some(text) = module.render(&params.format, context)?
                     && !text.is_empty()
                 {
-                    // Build the complete segment with minimal allocations
+                    // Build the complete segment (prefix + text + suffix)
+                    let mut segment = String::new();
+
                     if !params.prefix.is_empty() {
-                        output.push_str(&params.prefix);
+                        segment.push_str(&params.prefix);
+                    }
+                    segment.push_str(&text);
+                    if !params.suffix.is_empty() {
+                        segment.push_str(&params.suffix);
                     }
 
+                    // Apply style to the entire segment
                     if !params.style.is_empty() && !no_color {
                         let style = AnsiStyle::parse(&params.style).map_err(|error| {
                             PromptError::StyleError {
@@ -47,14 +54,10 @@ pub fn render_template(
                                 error,
                             }
                         })?;
-                        let styled = style.apply(&text);
+                        let styled = style.apply(&segment);
                         output.push_str(&styled);
                     } else {
-                        output.push_str(&text);
-                    }
-
-                    if !params.suffix.is_empty() {
-                        output.push_str(&params.suffix);
+                        output.push_str(&segment);
                     }
                 }
             }
@@ -64,7 +67,12 @@ pub fn render_template(
     Ok(output)
 }
 
-pub fn execute(format_str: &str, no_version: bool, exit_code: Option<i32>) -> Result<String> {
+pub fn execute(
+    format_str: &str,
+    no_version: bool,
+    exit_code: Option<i32>,
+    no_color: bool,
+) -> Result<String> {
     let context = ModuleContext {
         no_version,
         exit_code,
@@ -73,7 +81,7 @@ pub fn execute(format_str: &str, no_version: bool, exit_code: Option<i32>) -> Re
     let mut registry = ModuleRegistry::new();
     register_builtin_modules(&mut registry);
 
-    render_template(format_str, &registry, &context)
+    render_template(format_str, &registry, &context, no_color)
 }
 
 fn register_builtin_modules(registry: &mut ModuleRegistry) {

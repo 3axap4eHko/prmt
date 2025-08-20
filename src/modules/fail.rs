@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 
 pub struct FailModule;
@@ -15,19 +16,19 @@ impl FailModule {
 }
 
 impl Module for FailModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         let exit_code = context.exit_code.unwrap_or(0);
         if exit_code == 0 {
-            return None;
+            return Ok(None);
         }
 
         let symbol = match format {
-            "" | "full" => "❯",
-            "code" => &exit_code.to_string(),
-            custom => custom,
+            "" | "full" => "❯".to_string(),
+            "code" => exit_code.to_string(),
+            custom => custom.to_string(),
         };
 
-        Some(symbol.to_string())
+        Ok(Some(symbol))
     }
 }
 
@@ -40,7 +41,7 @@ mod tests {
         let module = FailModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(127);
-        let result = module.render("", &context);
+        let result = module.render("", &context).unwrap();
         assert_eq!(result, Some("❯".to_string()));
     }
 
@@ -49,7 +50,7 @@ mod tests {
         let module = FailModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(0);
-        let result = module.render("", &context);
+        let result = module.render("", &context).unwrap();
         assert_eq!(result, None);
     }
 
@@ -58,7 +59,7 @@ mod tests {
         let module = FailModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(42);
-        let result = module.render("code", &context);
+        let result = module.render("code", &context).unwrap();
         assert_eq!(result, Some("42".to_string()));
     }
 
@@ -67,7 +68,7 @@ mod tests {
         let module = FailModule::new();
         let mut context = ModuleContext::default();
         context.exit_code = Some(1);
-        let result = module.render("✗", &context);
+        let result = module.render("✗", &context).unwrap();
         assert_eq!(result, Some("✗".to_string()));
     }
 }

@@ -1,3 +1,4 @@
+use crate::error::Result;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
@@ -7,7 +8,7 @@ pub struct ModuleContext {
 }
 
 pub trait Module: Send + Sync {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String>;
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>>;
 }
 
 pub type ModuleRef = Arc<dyn Module>;

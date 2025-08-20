@@ -1,3 +1,4 @@
+use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
 use std::env;
 use unicode_width::UnicodeWidthStr;
@@ -17,8 +18,11 @@ impl PathModule {
 }
 
 impl Module for PathModule {
-    fn render(&self, format: &str, _context: &ModuleContext) -> Option<String> {
-        let current_dir = env::current_dir().ok()?;
+    fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
+        let current_dir = match env::current_dir() {
+            Ok(d) => d,
+            Err(_) => return Ok(None),
+        };
 
         match format {
             "" | "relative" | "r" => {
@@ -31,26 +35,26 @@ impl Module for PathModule {
                         // On Windows, normalize path separators to forward slashes
                         #[cfg(target_os = "windows")]
                         let replaced = replaced.replace('\\', "/");
-                        Some(replaced)
+                        Ok(Some(replaced))
                     } else {
                         #[cfg(target_os = "windows")]
-                        return Some(path_str.replace('\\', "/"));
+                        return Ok(Some(path_str.replace('\\', "/")));
                         #[cfg(not(target_os = "windows"))]
-                        Some(path_str.to_string())
+                        Ok(Some(path_str.to_string()))
                     }
                 } else {
                     #[cfg(target_os = "windows")]
-                    return Some(path_str.replace('\\', "/"));
+                    return Ok(Some(path_str.replace('\\', "/")));
                     #[cfg(not(target_os = "windows"))]
-                    Some(path_str.to_string())
+                    Ok(Some(path_str.to_string()))
                 }
             }
-            "absolute" | "a" => Some(current_dir.to_string_lossy().to_string()),
-            "short" | "s" => current_dir
+            "absolute" | "a" | "f" => Ok(Some(current_dir.to_string_lossy().to_string())),
+            "short" | "s" => Ok(current_dir
                 .file_name()
                 .and_then(|n| n.to_str())
                 .map(|s| s.to_string())
-                .or_else(|| Some(".".to_string())),
+                .or_else(|| Some(".".to_string()))),
             format if format.starts_with("truncate:") => {
                 let max_width: usize = format
                     .strip_prefix("truncate:")
@@ -72,7 +76,7 @@ impl Module for PathModule {
                 // Use unicode width for proper truncation
                 let width = UnicodeWidthStr::width(path.as_str());
                 if width <= max_width {
-                    Some(path)
+                    Ok(Some(path))
                 } else {
                     // Truncate with ellipsis
                     let ellipsis = "...";
@@ -92,10 +96,14 @@ impl Module for PathModule {
                     }
 
                     truncated.push_str(ellipsis);
-                    Some(truncated)
+                    Ok(Some(truncated))
                 }
             }
-            _ => None,
+            _ => Err(PromptError::InvalidFormat {
+                module: "path".to_string(),
+                format: format.to_string(),
+                valid_formats: "relative, r, absolute, a, f, short, s, truncate:N".to_string(),
+            }),
         }
     }
 }

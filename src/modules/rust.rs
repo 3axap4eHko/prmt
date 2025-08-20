@@ -1,4 +1,5 @@
 use crate::cache::VERSION_CACHE;
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -31,17 +32,25 @@ fn get_rust_version() -> Option<String> {
 }
 
 impl Module for RustModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("Cargo.toml")?;
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
+        if utils::find_upward("Cargo.toml").is_none() {
+            return Ok(None);
+        }
 
         if context.no_version {
-            return Some("rust".to_string());
+            return Ok(Some("rust".to_string()));
         }
+
+        // Validate and normalize format
+        let normalized_format = utils::validate_version_format(format, "rust")?;
 
         // Check cache first
         let cache_key = "rust_version";
         let version = if let Some(cached) = VERSION_CACHE.get(cache_key) {
-            cached?
+            match cached {
+                Some(v) => v,
+                None => return Ok(None),
+            }
         } else {
             // Get version with timeout consideration
             let version = get_rust_version();
@@ -50,21 +59,24 @@ impl Module for RustModule {
                 version.clone(),
                 Duration::from_secs(300),
             );
-            version?
+            match version {
+                Some(v) => v,
+                None => return Ok(None),
+            }
         };
 
-        match format {
-            "" | "full" => Some(version),
+        match normalized_format {
+            "full" => Ok(Some(version)),
             "short" => {
                 let parts: Vec<&str> = version.split('.').collect();
                 if parts.len() >= 2 {
-                    Some(format!("{}.{}", parts[0], parts[1]))
+                    Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Some(version)
+                    Ok(Some(version))
                 }
             }
-            "major" => version.split('.').next().map(|s| s.to_string()),
-            _ => None,
+            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            _ => unreachable!("validate_version_format should have caught this"),
         }
     }
 }

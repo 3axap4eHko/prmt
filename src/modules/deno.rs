@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -17,39 +18,48 @@ impl DenoModule {
 }
 
 impl Module for DenoModule {
-    fn render(&self, format: &str, context: &ModuleContext) -> Option<String> {
-        utils::find_upward("deno.json").or_else(|| utils::find_upward("deno.jsonc"))?;
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
+        if utils::find_upward("deno.json")
+            .or_else(|| utils::find_upward("deno.jsonc"))
+            .is_none()
+        {
+            return Ok(None);
+        }
 
         if context.no_version {
-            return Some("deno".to_string());
+            return Ok(Some("deno".to_string()));
         }
 
-        let output = Command::new("deno").arg("--version").output().ok()?;
+        // Validate and normalize format
+        let normalized_format = utils::validate_version_format(format, "deno")?;
 
-        if !output.status.success() {
-            return None;
-        }
+        let output = match Command::new("deno").arg("--version").output() {
+            Ok(o) if o.status.success() => o,
+            _ => return Ok(None),
+        };
 
         let version_str = String::from_utf8_lossy(&output.stdout);
-        let version = version_str
+        let version = match version_str
             .lines()
-            .next()?
-            .split_whitespace()
-            .nth(1)?
-            .to_string();
+            .next()
+            .and_then(|l| l.split_whitespace().nth(1))
+        {
+            Some(v) => v.to_string(),
+            None => return Ok(None),
+        };
 
-        match format {
-            "" | "full" => Some(version),
+        match normalized_format {
+            "full" => Ok(Some(version)),
             "short" => {
                 let parts: Vec<&str> = version.split('.').collect();
                 if parts.len() >= 2 {
-                    Some(format!("{}.{}", parts[0], parts[1]))
+                    Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Some(version)
+                    Ok(Some(version))
                 }
             }
-            "major" => version.split('.').next().map(|s| s.to_string()),
-            _ => None,
+            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            _ => unreachable!("validate_version_format should have caught this"),
         }
     }
 }

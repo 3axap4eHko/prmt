@@ -40,7 +40,7 @@ impl<'a> Template<'a> {
                         crate::error::PromptError::UnknownModule(params.module.clone())
                     })?;
 
-                    if let Some(text) = module.render(&params.format, context)
+                    if let Some(text) = module.render(&params.format, context)?
                         && !text.is_empty()
                     {
                         // Build the complete segment with minimal allocations
