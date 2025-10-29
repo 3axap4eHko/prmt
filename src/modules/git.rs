@@ -122,8 +122,12 @@ impl Module for GitModule {
                 .unwrap_or_else(|_| "HEAD".to_string())
         } else if let Ok(Some(head_name)) = repo.head_name() {
             String::from_utf8(head_name.shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
+        } else if let Ok(head) = repo.head() {
+            head.id()
+                .map(|id| id.shorten_or_id().to_string())
+                .unwrap_or_else(|| "HEAD".to_string())
         } else {
-            "main".to_string()
+            "HEAD".to_string()
         };
 
         // Get status info based on format

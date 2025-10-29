@@ -45,7 +45,12 @@ impl Module for PythonModule {
             _ => return Ok(None),
         };
 
-        let version_str = String::from_utf8_lossy(&output.stdout);
+        let version_bytes = if output.stdout.is_empty() {
+            output.stderr.as_slice()
+        } else {
+            output.stdout.as_slice()
+        };
+        let version_str = String::from_utf8_lossy(version_bytes);
         let version = match version_str.split_whitespace().nth(1) {
             Some(v) => v.to_string(),
             None => return Ok(None),

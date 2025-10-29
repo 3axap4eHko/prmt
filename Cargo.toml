@@ -45,6 +45,7 @@ chrono = "0.4"
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
 regex = "1"
+serial_test = "3"
 
 [profile.release]
 lto = "fat"

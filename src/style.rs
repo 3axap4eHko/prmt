@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 pub trait ModuleStyle: Sized {
     fn parse(style_str: &str) -> Result<Self, String>;
     fn apply(&self, text: &str) -> String;
@@ -17,21 +19,19 @@ pub enum Color {
 }
 
 impl Color {
-    fn to_ansi_code(&self) -> String {
+    fn push_ansi_code(&self, buf: &mut String) {
         match self {
-            Color::Black => "\x1b[30m".to_string(),
-            Color::Red => "\x1b[31m".to_string(),
-            Color::Green => "\x1b[32m".to_string(),
-            Color::Yellow => "\x1b[33m".to_string(),
-            Color::Blue => "\x1b[34m".to_string(),
-            Color::Purple => "\x1b[35m".to_string(),
-            Color::Cyan => "\x1b[36m".to_string(),
-            Color::White => "\x1b[37m".to_string(),
+            Color::Black => buf.push_str("\x1b[30m"),
+            Color::Red => buf.push_str("\x1b[31m"),
+            Color::Green => buf.push_str("\x1b[32m"),
+            Color::Yellow => buf.push_str("\x1b[33m"),
+            Color::Blue => buf.push_str("\x1b[34m"),
+            Color::Purple => buf.push_str("\x1b[35m"),
+            Color::Cyan => buf.push_str("\x1b[36m"),
+            Color::White => buf.push_str("\x1b[37m"),
             Color::Hex(hex) => {
-                if let Ok(rgb) = parse_hex_color(hex) {
-                    format!("\x1b[38;2;{};{};{}m", rgb.0, rgb.1, rgb.2)
-                } else {
-                    String::new()
+                if let Ok((r, g, b)) = parse_hex_color(hex) {
+                    let _ = write!(buf, "\x1b[38;2;{};{};{}m", r, g, b);
                 }
             }
         }
@@ -84,35 +84,15 @@ impl ModuleStyle for AnsiStyle {
     }
 
     fn apply(&self, text: &str) -> String {
-        let mut codes = Vec::new();
-
-        if let Some(ref color) = self.color {
-            codes.push(color.to_ansi_code());
-        }
-        if self.bold {
-            codes.push("\x1b[1m".to_string());
-        }
-        if self.dim {
-            codes.push("\x1b[2m".to_string());
-        }
-        if self.italic {
-            codes.push("\x1b[3m".to_string());
-        }
-        if self.underline {
-            codes.push("\x1b[4m".to_string());
-        }
-        if self.reverse {
-            codes.push("\x1b[7m".to_string());
-        }
-        if self.strikethrough {
-            codes.push("\x1b[9m".to_string());
+        if !self.has_style() {
+            return text.to_string();
         }
 
-        if codes.is_empty() {
-            text.to_string()
-        } else {
-            format!("{}{}\x1b[0m", codes.join(""), text)
-        }
+        let mut output = String::with_capacity(text.len() + 16);
+        self.write_start_codes(&mut output);
+        output.push_str(text);
+        self.write_reset(&mut output);
+        output
     }
 }
 
@@ -131,6 +111,48 @@ fn parse_hex_color(hex: &str) -> Result<(u8, u8, u8), String> {
         u8::from_str_radix(&hex[4..6], 16).map_err(|_| format!("Invalid hex color: {}", hex))?;
 
     Ok((r, g, b))
+}
+
+impl AnsiStyle {
+    fn has_style(&self) -> bool {
+        self.color.is_some()
+            || self.bold
+            || self.italic
+            || self.underline
+            || self.dim
+            || self.reverse
+            || self.strikethrough
+    }
+
+    pub fn write_start_codes(&self, buf: &mut String) {
+        if let Some(ref color) = self.color {
+            color.push_ansi_code(buf);
+        }
+        if self.bold {
+            buf.push_str("\x1b[1m");
+        }
+        if self.dim {
+            buf.push_str("\x1b[2m");
+        }
+        if self.italic {
+            buf.push_str("\x1b[3m");
+        }
+        if self.underline {
+            buf.push_str("\x1b[4m");
+        }
+        if self.reverse {
+            buf.push_str("\x1b[7m");
+        }
+        if self.strikethrough {
+            buf.push_str("\x1b[9m");
+        }
+    }
+
+    pub fn write_reset(&self, buf: &mut String) {
+        if self.has_style() {
+            buf.push_str("\x1b[0m");
+        }
+    }
 }
 
 #[cfg(test)]

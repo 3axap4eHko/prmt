@@ -43,26 +43,35 @@ impl<'a> Template<'a> {
                     if let Some(text) = module.render(&params.format, context)?
                         && !text.is_empty()
                     {
-                        // Build the complete segment with minimal allocations
-                        if !params.prefix.is_empty() {
-                            output.push_str(&params.prefix);
-                        }
+                        let has_prefix = !params.prefix.is_empty();
+                        let has_suffix = !params.suffix.is_empty();
+                        let styled = !params.style.is_empty() && !no_color;
 
-                        if !params.style.is_empty() && !no_color {
+                        if styled {
                             let style = AnsiStyle::parse(&params.style).map_err(|error| {
                                 crate::error::PromptError::StyleError {
                                     module: params.module.clone(),
                                     error,
                                 }
                             })?;
-                            let styled = style.apply(&text);
-                            output.push_str(&styled);
-                        } else {
-                            output.push_str(&text);
-                        }
 
-                        if !params.suffix.is_empty() {
-                            output.push_str(&params.suffix);
+                            style.write_start_codes(&mut output);
+                            if has_prefix {
+                                output.push_str(&params.prefix);
+                            }
+                            output.push_str(&text);
+                            if has_suffix {
+                                output.push_str(&params.suffix);
+                            }
+                            style.write_reset(&mut output);
+                        } else {
+                            if has_prefix {
+                                output.push_str(&params.prefix);
+                            }
+                            output.push_str(&text);
+                            if has_suffix {
+                                output.push_str(&params.suffix);
+                            }
                         }
                     }
                 }
