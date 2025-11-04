@@ -111,5 +111,6 @@ fn register_builtin_modules(registry: &mut ModuleRegistry) {
     registry.register("go", Arc::new(go::GoModule));
     registry.register("deno", Arc::new(deno::DenoModule));
     registry.register("bun", Arc::new(bun::BunModule));
-    registry.register("time", Arc::new(time::TimeModule))
+    registry.register("time", Arc::new(time::TimeModule));
+    registry.register("host", Arc::new(host::HostModule))
 }

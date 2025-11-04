@@ -3,6 +3,7 @@ pub mod deno;
 pub mod fail;
 pub mod git;
 pub mod go;
+pub mod host;
 pub mod node;
 pub mod ok;
 pub mod path;
