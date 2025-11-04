@@ -1,27 +1,25 @@
 use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
-use whoami::fallible::hostname;
+use whoami::username;
 
 
-pub struct HostModule;
+pub struct WhoamiModule;
 
-impl Default for HostModule {
+impl Default for WhoamiModule {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl HostModule {
+impl WhoamiModule {
     pub fn new() -> Self {
         Self
     }
 }
 
-impl Module for HostModule {
+impl Module for WhoamiModule {
     #[allow(unused)]
     fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
-        Ok(hostname().ok())
+        Ok(Some(username()))
     }
 }
-
-

@@ -11,3 +11,4 @@ pub mod python;
 pub mod rust;
 pub mod time;
 pub mod utils;
+pub mod whoami;
