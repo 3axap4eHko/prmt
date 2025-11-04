@@ -41,11 +41,13 @@ anyhow = "1"
 unicode-width = "0.2"
 bitflags = "2"
 chrono = "0.4"
+toml = "0.8"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }
 regex = "1"
 serial_test = "3"
+tempfile = "3"
 
 [profile.release]
 lto = "fat"

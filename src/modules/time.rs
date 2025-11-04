@@ -71,13 +71,13 @@ mod tests {
         let module = TimeModule;
         let context = ModuleContext::default();
 
+        let re = Regex::new(r"^\d{2}:\d{2}:\d{2}$").unwrap();
         for format in &["24hs", "24HS"] {
             let result = module.render(format, &context).unwrap();
             assert!(result.is_some());
             let time = result.unwrap();
             assert_eq!(time.len(), 8);
 
-            let re = Regex::new(r"^\d{2}:\d{2}:\d{2}$").unwrap();
             assert!(
                 re.is_match(&time),
                 "Expected HH:MM:SS format for {}, got: {}",
@@ -92,12 +92,12 @@ mod tests {
         let module = TimeModule;
         let context = ModuleContext::default();
 
+        let re = Regex::new(r"^\d{2}:\d{2}(AM|PM)$").unwrap();
         for format in &["12h", "12H"] {
             let result = module.render(format, &context).unwrap();
             assert!(result.is_some());
             let time = result.unwrap();
 
-            let re = Regex::new(r"^\d{2}:\d{2}(AM|PM)$").unwrap();
             assert!(
                 re.is_match(&time),
                 "Expected hh:MMAM/PM format for {}, got: {}",
@@ -114,12 +114,12 @@ mod tests {
         let module = TimeModule;
         let context = ModuleContext::default();
 
+        let re = Regex::new(r"^\d{2}:\d{2}:\d{2}(AM|PM)$").unwrap();
         for format in &["12hs", "12HS"] {
             let result = module.render(format, &context).unwrap();
             assert!(result.is_some());
             let time = result.unwrap();
 
-            let re = Regex::new(r"^\d{2}:\d{2}:\d{2}(AM|PM)$").unwrap();
             assert!(
                 re.is_match(&time),
                 "Expected hh:MM:SSAM/PM format for {}, got: {}",
