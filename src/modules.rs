@@ -1,5 +1,6 @@
 pub mod bun;
 pub mod deno;
+pub mod elixir;
 pub mod fail;
 pub mod git;
 pub mod go;
