@@ -16,6 +16,7 @@ fn setup_registry() -> ModuleRegistry {
     registry.register("go", Arc::new(go::GoModule));
     registry.register("deno", Arc::new(deno::DenoModule));
     registry.register("bun", Arc::new(bun::BunModule));
+    registry.register("elixir", Arc::new(elixir::ElixirModule));
     registry.register("ok", Arc::new(ok::OkModule));
     registry.register("fail", Arc::new(fail::FailModule));
     registry
@@ -35,7 +36,7 @@ fn bench_parser_scenarios(c: &mut Criterion) {
         ),
         (
             "large",
-            "{path:cyan:truncate:30:>>:<<} {rust:red:full} {node:green:major} {python:yellow:short} {go:blue} {deno:magenta} {bun:white} {git:purple:full:🌿:} {ok:green:✓} {fail:red:✗}",
+            "{path:cyan:truncate:30:>>:<<} {rust:red:full} {node:green:major} {python:yellow:short} {go:blue} {deno:magenta} {bun:white} {elixir:purple} {git:purple:full:🌿:} {ok:green:✓} {fail:red:✗}",
         ),
         (
             "escaped_heavy",
@@ -103,7 +104,7 @@ fn bench_template_rendering(c: &mut Criterion) {
         ),
         (
             "all_modules",
-            "{path} {rust} {node} {python} {go} {deno} {bun} {git} {ok}",
+            "{path} {rust} {node} {python} {go} {deno} {bun} {elixir} {git} {ok}",
             context_no_version.clone(),
         ),
     ];
