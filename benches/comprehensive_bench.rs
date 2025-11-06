@@ -1,5 +1,6 @@
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use prmt::{ModuleContext, ModuleRegistry, Template, execute, parse};
+use std::hint::black_box;
 use std::time::Duration;
 
 fn setup_registry() -> ModuleRegistry {
