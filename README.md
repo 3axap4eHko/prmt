@@ -280,6 +280,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 | `deno` | `deno.json`, `deno.jsonc` | Deno version |
 | `bun` | `bun.lockb` | Bun version |
 | `go` | `go.mod` | Go version |
+| `env` | Requested variable is set/non-empty | Value of a specific environment variable (format = name) |
 | `time` | Always active | Current time in various formats |
 
 ### Type Values
@@ -308,6 +309,10 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 - `24hs` or `24HS` - 24-hour format with seconds HH:MM:SS
 - `12h` or `12H` - 12-hour format hh:MMAM/PM
 - `12hs` or `12HS` - 12-hour format with seconds hh:MM:SSAM/PM
+
+**Env module**:
+- The `type` field is required and must be the environment variable name (e.g., `{env::USER}` or `{env:blue:PATH}`).
+- The module emits the variable value only when it exists and is non-empty; otherwise it returns nothing so the placeholder is effectively inactive.
 
 ### Type Validation
 
