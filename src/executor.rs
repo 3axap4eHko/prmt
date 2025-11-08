@@ -269,8 +269,7 @@ fn ensure_thread_pool() {
         let max_threads = std::thread::available_parallelism()
             .map(|parallelism| parallelism.get())
             .unwrap_or(1)
-            .min(4)
-            .max(1);
+            .clamp(1, 4);
         let _ = rayon::ThreadPoolBuilder::new()
             .num_threads(max_threads)
             .build_global();

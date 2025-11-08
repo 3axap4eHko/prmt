@@ -117,10 +117,10 @@ fn toolchain_override() -> Option<String> {
 fn get_rust_version() -> Option<String> {
     let settings = rustup_settings();
 
-    if let Some(toolchain) = toolchain_override() {
-        if let Some(version) = run_rustc_for_toolchain(&toolchain, settings) {
-            return Some(version);
-        }
+    if let Some(toolchain) = toolchain_override()
+        && let Some(version) = run_rustc_for_toolchain(&toolchain, settings)
+    {
+        return Some(version);
     }
 
     run_plain_rustc()
