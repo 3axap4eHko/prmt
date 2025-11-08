@@ -3,6 +3,10 @@ use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use bitflags::bitflags;
+use gix::bstr::BString;
+use gix::progress::Discard;
+use gix::status::Item as StatusItem;
+use gix::status::index_worktree::iter::Summary as WorktreeSummary;
 use std::path::PathBuf;
 
 bitflags! {
@@ -60,6 +64,45 @@ fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
         }
     }
     status
+}
+
+fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
+    let mut status = GitStatus::empty();
+
+    let platform = repo.status(Discard).ok()?;
+    let iter = platform.into_iter(Vec::<BString>::new()).ok()?;
+
+    for item in iter {
+        let item = item.ok()?;
+        match item {
+            StatusItem::IndexWorktree(change) => {
+                if let Some(summary) = change.summary() {
+                    match summary {
+                        WorktreeSummary::Added => status |= GitStatus::UNTRACKED,
+                        WorktreeSummary::IntentToAdd => status |= GitStatus::STAGED,
+                        WorktreeSummary::Conflict
+                        | WorktreeSummary::Copied
+                        | WorktreeSummary::Modified
+                        | WorktreeSummary::Removed
+                        | WorktreeSummary::Renamed
+                        | WorktreeSummary::TypeChange => status |= GitStatus::MODIFIED,
+                    }
+                }
+            }
+            StatusItem::TreeIndex(_) => {
+                status |= GitStatus::STAGED;
+            }
+        }
+
+        if status.contains(GitStatus::MODIFIED)
+            && status.contains(GitStatus::STAGED)
+            && status.contains(GitStatus::UNTRACKED)
+        {
+            break;
+        }
+    }
+
+    Some(status)
 }
 
 fn validate_git_format(format: &str) -> Result<&str> {
@@ -130,11 +173,10 @@ impl Module for GitModule {
             "HEAD".to_string()
         };
 
-        // Get status info based on format
-        let status = match normalized_format {
-            "full" => get_git_status_slow(&repo_root),
-            "short" => GitStatus::empty(),
-            _ => unreachable!("validate_git_format should have caught this"),
+        let status = if normalized_format == "full" {
+            collect_git_status_fast(&repo).unwrap_or_else(|| get_git_status_slow(&repo_root))
+        } else {
+            GitStatus::empty()
         };
 
         // Cache the result

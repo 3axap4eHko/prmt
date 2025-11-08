@@ -30,7 +30,7 @@ harness = false
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env"] }
 colored = "3"
-gix = { version = "0.73", default-features = false, features = ["max-performance-safe", "revision"] }
+gix  = { version = "0.74.1", default-features = false, features = ["max-performance-safe", "revision", "status"] }
 rayon = "1"
 dirs = "6"
 memchr = "2"
@@ -41,7 +41,7 @@ anyhow = "1"
 unicode-width = "0.2"
 bitflags = "2"
 chrono = "0.4"
-toml = "0.8"
+toml = "0.9"
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports"] }

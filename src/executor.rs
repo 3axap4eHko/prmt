@@ -1,15 +1,42 @@
 use crate::error::{PromptError, Result};
-use crate::module_trait::ModuleContext;
-use crate::parser::{Token, parse};
+use crate::module_trait::{ModuleContext, ModuleRef};
+use crate::parser::{Params, Token, parse};
 use crate::registry::ModuleRegistry;
 use crate::style::{AnsiStyle, ModuleStyle};
+use rayon::prelude::*;
+use std::borrow::Cow;
+use std::collections::HashSet;
+use std::env;
+use std::sync::{Arc, OnceLock};
 
 #[inline]
-fn estimate_output_size(template: &str) -> usize {
-    // Estimate: template length + 50% overhead for module outputs and ANSI codes
-    template.len() + (template.len() / 2) + 128
+fn estimate_output_size(template_len: usize) -> usize {
+    template_len + (template_len / 2) + 128
 }
 
+enum RenderSlot<'a> {
+    Static(Cow<'a, str>),
+    Dynamic {
+        params: Params,
+        module: ModuleRef,
+        output: OnceLock<Option<String>>,
+    },
+}
+
+impl<'a> RenderSlot<'a> {
+    fn len(&self) -> usize {
+        match self {
+            RenderSlot::Static(text) => text.len(),
+            RenderSlot::Dynamic { output, .. } => output
+                .get()
+                .and_then(|value| value.as_ref())
+                .map(|text| text.len())
+                .unwrap_or(0),
+        }
+    }
+}
+
+#[allow(dead_code)]
 pub fn render_template(
     template: &str,
     registry: &ModuleRegistry,
@@ -17,48 +44,109 @@ pub fn render_template(
     no_color: bool,
 ) -> Result<String> {
     let tokens = parse(template);
-    let mut output = String::with_capacity(estimate_output_size(template));
+    render_tokens(tokens, registry, context, no_color, template.len())
+}
 
-    // Check for NO_COLOR environment variable (in addition to flag)
-    let no_color = no_color || std::env::var("NO_COLOR").is_ok();
+fn render_tokens<'a>(
+    tokens: Vec<Token<'a>>,
+    registry: &ModuleRegistry,
+    context: &ModuleContext,
+    no_color: bool,
+    template_len: usize,
+) -> Result<String> {
+    let dynamic_count = tokens
+        .iter()
+        .filter(|token| matches!(token, Token::Placeholder(_)))
+        .count();
+    let no_color = no_color || env::var("NO_COLOR").is_ok();
+
+    if dynamic_count <= 1 {
+        return render_tokens_sequential(tokens, registry, context, no_color, template_len);
+    }
+
+    render_tokens_parallel(tokens, registry, context, no_color)
+}
+
+fn render_tokens_sequential<'a>(
+    tokens: Vec<Token<'a>>,
+    registry: &ModuleRegistry,
+    context: &ModuleContext,
+    no_color: bool,
+    template_len: usize,
+) -> Result<String> {
+    let mut output = String::with_capacity(estimate_output_size(template_len));
 
     for token in tokens {
         match token {
+            Token::Text(text) => output.push_str(&text),
+            Token::Placeholder(params) => {
+                let module = registry
+                    .get(&params.module)
+                    .ok_or_else(|| PromptError::UnknownModule(params.module.clone()))?;
+
+                if let Some(value) = render_placeholder(&module, &params, context, no_color)? {
+                    output.push_str(&value);
+                }
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+fn render_tokens_parallel<'a>(
+    tokens: Vec<Token<'a>>,
+    registry: &ModuleRegistry,
+    context: &ModuleContext,
+    no_color: bool,
+) -> Result<String> {
+    let mut slots = Vec::with_capacity(tokens.len());
+    let mut dynamic_indices = Vec::new();
+
+    for token in tokens.into_iter() {
+        match token {
             Token::Text(text) => {
-                output.push_str(&text);
+                slots.push(RenderSlot::Static(text));
             }
             Token::Placeholder(params) => {
                 let module = registry
                     .get(&params.module)
                     .ok_or_else(|| PromptError::UnknownModule(params.module.clone()))?;
 
-                if let Some(text) = module.render(&params.format, context)?
-                    && !text.is_empty()
-                {
-                    // Build the complete segment (prefix + text + suffix)
-                    let mut segment = String::new();
+                let index = slots.len();
+                slots.push(RenderSlot::Dynamic {
+                    params,
+                    module,
+                    output: OnceLock::new(),
+                });
+                dynamic_indices.push(index);
+            }
+        }
+    }
 
-                    if !params.prefix.is_empty() {
-                        segment.push_str(&params.prefix);
-                    }
-                    segment.push_str(&text);
-                    if !params.suffix.is_empty() {
-                        segment.push_str(&params.suffix);
-                    }
+    if dynamic_indices.len() <= 1 {
+        for &index in &dynamic_indices {
+            compute_slot(&slots[index], context, no_color)?;
+        }
+    } else {
+        ensure_thread_pool();
+        dynamic_indices
+            .par_iter()
+            .try_for_each(|&index| compute_slot(&slots[index], context, no_color))?;
+    }
 
-                    // Apply style to the entire segment
-                    if !params.style.is_empty() && !no_color {
-                        let style = AnsiStyle::parse(&params.style).map_err(|error| {
-                            PromptError::StyleError {
-                                module: params.module.clone(),
-                                error,
-                            }
-                        })?;
-                        let styled = style.apply(&segment);
-                        output.push_str(&styled);
-                    } else {
-                        output.push_str(&segment);
-                    }
+    let total_len: usize = slots.iter().map(RenderSlot::len).sum();
+    let mut output = String::with_capacity(total_len);
+
+    for slot in slots.into_iter() {
+        match slot {
+            RenderSlot::Static(text) => output.push_str(&text),
+            RenderSlot::Dynamic {
+                output: slot_output,
+                ..
+            } => {
+                if let Some(Some(text)) = slot_output.into_inner() {
+                    output.push_str(&text);
                 }
             }
         }
@@ -78,38 +166,113 @@ pub fn execute(
         exit_code,
     };
 
-    let mut registry = ModuleRegistry::new();
-    register_builtin_modules(&mut registry);
-
-    render_template(format_str, &registry, &context, no_color)
+    let tokens = parse(format_str);
+    let registry = build_registry(&tokens)?;
+    render_tokens(tokens, &registry, &context, no_color, format_str.len())
 }
 
-fn register_builtin_modules(registry: &mut ModuleRegistry) {
-    use crate::modules::*;
-    use std::sync::Arc;
+fn render_placeholder(
+    module: &ModuleRef,
+    params: &Params,
+    context: &ModuleContext,
+    no_color: bool,
+) -> Result<Option<String>> {
+    let Some(text) = module.render(&params.format, context)? else {
+        return Ok(None);
+    };
 
-    // Configure Rayon thread pool for prompt generation
-    // Limit threads to avoid cold-start overhead in shells
-    let max_threads = std::cmp::min(rayon::current_num_threads(), 4);
-
-    if rayon::ThreadPoolBuilder::new()
-        .num_threads(max_threads)
-        .build_global()
-        .is_err()
-    {
-        // Pool already initialized, that's fine
+    if text.is_empty() {
+        return Ok(None);
     }
 
-    // Register modules - these are lightweight operations
-    registry.register("path", Arc::new(path::PathModule));
-    registry.register("git", Arc::new(git::GitModule));
-    registry.register("ok", Arc::new(ok::OkModule));
-    registry.register("fail", Arc::new(fail::FailModule));
-    registry.register("rust", Arc::new(rust::RustModule));
-    registry.register("node", Arc::new(node::NodeModule));
-    registry.register("python", Arc::new(python::PythonModule));
-    registry.register("go", Arc::new(go::GoModule));
-    registry.register("deno", Arc::new(deno::DenoModule));
-    registry.register("bun", Arc::new(bun::BunModule));
-    registry.register("time", Arc::new(time::TimeModule))
+    // Build the complete segment (prefix + text + suffix)
+    let estimated_len = params.prefix.len() + text.len() + params.suffix.len();
+    let mut segment = String::with_capacity(estimated_len);
+
+    if !params.prefix.is_empty() {
+        segment.push_str(&params.prefix);
+    }
+    segment.push_str(&text);
+    if !params.suffix.is_empty() {
+        segment.push_str(&params.suffix);
+    }
+
+    // Apply style to the entire segment
+    if params.style.is_empty() || no_color {
+        return Ok(Some(segment));
+    }
+
+    let style = AnsiStyle::parse(&params.style).map_err(|error| PromptError::StyleError {
+        module: params.module.clone(),
+        error,
+    })?;
+    let styled = style.apply(&segment);
+    Ok(Some(styled))
+}
+
+fn compute_slot(slot: &RenderSlot<'_>, context: &ModuleContext, no_color: bool) -> Result<()> {
+    let RenderSlot::Dynamic {
+        params,
+        module,
+        output,
+    } = slot
+    else {
+        return Ok(());
+    };
+
+    let value = render_placeholder(module, params, context, no_color)?;
+    output
+        .set(value)
+        .expect("placeholder result should only be computed once");
+    Ok(())
+}
+
+fn build_registry(tokens: &[Token<'_>]) -> Result<ModuleRegistry> {
+    let mut registry = ModuleRegistry::new();
+    let mut required: HashSet<&str> = HashSet::new();
+
+    for token in tokens {
+        if let Token::Placeholder(params) = token {
+            let name = params.module.as_str();
+            if required.insert(name) {
+                let module = instantiate_module(name)
+                    .ok_or_else(|| PromptError::UnknownModule(name.to_string()))?;
+                registry.register(name.to_string(), module);
+            }
+        }
+    }
+
+    Ok(registry)
+}
+
+fn instantiate_module(name: &str) -> Option<ModuleRef> {
+    use crate::modules::*;
+    Some(match name {
+        "path" => Arc::new(path::PathModule::new()),
+        "git" => Arc::new(git::GitModule::new()),
+        "ok" => Arc::new(ok::OkModule::new()),
+        "fail" => Arc::new(fail::FailModule::new()),
+        "rust" => Arc::new(rust::RustModule::new()),
+        "node" => Arc::new(node::NodeModule::new()),
+        "python" => Arc::new(python::PythonModule::new()),
+        "go" => Arc::new(go::GoModule::new()),
+        "deno" => Arc::new(deno::DenoModule::new()),
+        "bun" => Arc::new(bun::BunModule::new()),
+        "time" => Arc::new(time::TimeModule),
+        _ => return None,
+    })
+}
+
+fn ensure_thread_pool() {
+    static THREAD_POOL_INIT: OnceLock<()> = OnceLock::new();
+    THREAD_POOL_INIT.get_or_init(|| {
+        let max_threads = std::thread::available_parallelism()
+            .map(|parallelism| parallelism.get())
+            .unwrap_or(1)
+            .min(4)
+            .max(1);
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(max_threads)
+            .build_global();
+    });
 }
