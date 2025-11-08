@@ -32,11 +32,9 @@ impl<'a> Parser<'a> {
         self.pos = pos.min(self.bytes.len());
     }
 
-    /// # Safety
-    /// `start` must be less than or equal to `self.pos`, and the range
-    /// `start..self.pos` must lie on UTF-8 character boundaries within `self.bytes`.
-    unsafe fn current_slice(&self, start: usize) -> &'a str {
-        unsafe { std::str::from_utf8_unchecked(&self.bytes[start..self.pos]) }
+    fn current_slice(&self, start: usize) -> &'a str {
+        std::str::from_utf8(&self.bytes[start..self.pos])
+            .expect("Invalid UTF-8 slicing")
     }
 
     fn remaining(&self) -> &'a [u8] {
@@ -79,9 +77,9 @@ impl<'a> Parser<'a> {
                             b'{' | b'}' | b'\\' | b'n' | b't' | b':' => {
                                 if abs_pos > start {
                                     self.skip_to(abs_pos);
-                                    return Some(Token::Text(Cow::Borrowed(unsafe {
+                                    return Some(Token::Text(Cow::Borrowed(
                                         self.current_slice(start)
-                                    })));
+                                    )));
                                 }
 
                                 let escaped = match self.bytes[abs_pos + 1] {
@@ -104,9 +102,9 @@ impl<'a> Parser<'a> {
                     } else {
                         self.skip_to(self.bytes.len());
                         if start < self.bytes.len() {
-                            return Some(Token::Text(Cow::Borrowed(unsafe {
+                            return Some(Token::Text(Cow::Borrowed(
                                 self.current_slice(start)
-                            })));
+                            )));
                         }
                         return None;
                     }
@@ -114,9 +112,9 @@ impl<'a> Parser<'a> {
                 b'{' => {
                     if abs_pos > start {
                         self.skip_to(abs_pos);
-                        return Some(Token::Text(Cow::Borrowed(unsafe {
+                        return Some(Token::Text(Cow::Borrowed(
                             self.current_slice(start)
-                        })));
+                        )));
                     }
 
                     if let Some(end_offset) = memchr::memchr(b'}', &self.bytes[abs_pos + 1..]) {
@@ -124,7 +122,7 @@ impl<'a> Parser<'a> {
                         let content = &self.bytes[abs_pos + 1..end_pos];
 
                         if let Some(params) =
-                            parse_placeholder(unsafe { std::str::from_utf8_unchecked(content) })
+                            parse_placeholder(std::str::from_utf8(content).expect("Invalid UTF-8 in placeholder"))
                         {
                             self.skip_to(end_pos + 1);
                             return Some(Token::Placeholder(params));
@@ -137,9 +135,9 @@ impl<'a> Parser<'a> {
                 b'}' => {
                     if abs_pos > start {
                         self.skip_to(abs_pos);
-                        return Some(Token::Text(Cow::Borrowed(unsafe {
+                        return Some(Token::Text(Cow::Borrowed(
                             self.current_slice(start)
-                        })));
+                        )));
                     }
                     self.skip_to(abs_pos + 1);
                     return Some(Token::Text(Cow::Borrowed("}")));
@@ -149,9 +147,9 @@ impl<'a> Parser<'a> {
         } else {
             self.skip_to(self.bytes.len());
             if start < self.bytes.len() {
-                return Some(Token::Text(Cow::Borrowed(unsafe {
+                return Some(Token::Text(Cow::Borrowed(
                     self.current_slice(start)
-                })));
+                )));
             }
         }
 
@@ -186,7 +184,7 @@ fn split_fields(s: &str) -> [&str; 5] {
         if bytes[i] == b'\\' {
             i += 2;
         } else if bytes[i] == b':' {
-            fields[field_idx] = unsafe { std::str::from_utf8_unchecked(&bytes[start..i]) };
+            fields[field_idx] = std::str::from_utf8(&bytes[start..i]).expect("Invalid UTF-8 field");
             field_idx += 1;
             start = i + 1;
             i += 1;
@@ -195,7 +193,7 @@ fn split_fields(s: &str) -> [&str; 5] {
         }
     }
 
-    fields[field_idx] = unsafe { std::str::from_utf8_unchecked(&bytes[start..]) };
+    fields[field_idx] = std::str::from_utf8(&bytes[start..]).expect("Invalid UTF-8 field");
     fields
 }
 
