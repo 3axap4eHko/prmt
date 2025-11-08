@@ -3,7 +3,6 @@ use crate::error::Result;
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
-use std::time::Duration;
 
 pub struct NodeModule;
 
@@ -53,11 +52,7 @@ impl Module for NodeModule {
             }
         } else {
             let version = get_node_version();
-            VERSION_CACHE.insert(
-                cache_key.to_string(),
-                version.clone(),
-                Duration::from_secs(300),
-            );
+            VERSION_CACHE.insert(cache_key.to_string(), version.clone());
             match version {
                 Some(v) => v,
                 None => return Ok(None),
