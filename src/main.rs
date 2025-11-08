@@ -23,13 +23,13 @@ struct Cli {
     #[arg(short = 'f', long)]
     format_flag: Option<String>,
 
-    #[arg(long)]
+    #[arg(short = 'n', long)]
     no_version: bool,
 
-    #[arg(long)]
+    #[arg(short = 'd', long)]
     debug: bool,
 
-    #[arg(long)]
+    #[arg(short = 'b', long)]
     bench: bool,
 
     #[arg(long)]
