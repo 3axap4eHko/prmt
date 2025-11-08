@@ -3,7 +3,14 @@ use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use bitflags::bitflags;
-use std::path::PathBuf;
+use gix::bstr::BString;
+use gix::progress::Discard;
+use gix::status::Item as StatusItem;
+use gix::status::index_worktree::iter::Summary as WorktreeSummary;
+use rayon::join;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Arc;
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -62,6 +69,93 @@ fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
     status
 }
 
+fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
+    let mut status = GitStatus::empty();
+
+    let platform = repo.status(Discard).ok()?;
+    let iter = platform.into_iter(Vec::<BString>::new()).ok()?;
+
+    for item in iter {
+        let item = item.ok()?;
+        match item {
+            StatusItem::IndexWorktree(change) => {
+                if let Some(summary) = change.summary() {
+                    match summary {
+                        WorktreeSummary::Added => status |= GitStatus::UNTRACKED,
+                        WorktreeSummary::IntentToAdd => status |= GitStatus::STAGED,
+                        WorktreeSummary::Conflict
+                        | WorktreeSummary::Copied
+                        | WorktreeSummary::Modified
+                        | WorktreeSummary::Removed
+                        | WorktreeSummary::Renamed
+                        | WorktreeSummary::TypeChange => status |= GitStatus::MODIFIED,
+                    }
+                }
+            }
+            StatusItem::TreeIndex(_) => {
+                status |= GitStatus::STAGED;
+            }
+        }
+
+        if status.contains(GitStatus::MODIFIED)
+            && status.contains(GitStatus::STAGED)
+            && status.contains(GitStatus::UNTRACKED)
+        {
+            break;
+        }
+    }
+
+    Some(status)
+}
+
+fn current_branch_from_repo(repo: &gix::Repository) -> String {
+    if let Ok(Some(head_ref)) = repo.head_ref() {
+        String::from_utf8(head_ref.name().shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
+    } else if let Ok(Some(head_name)) = repo.head_name() {
+        String::from_utf8(head_name.shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
+    } else if let Ok(head) = repo.head() {
+        head.id()
+            .map(|id| id.shorten_or_id().to_string())
+            .unwrap_or_else(|| "HEAD".to_string())
+    } else {
+        "HEAD".to_string()
+    }
+}
+
+fn current_branch_from_cli(repo_root: &Path) -> Option<String> {
+    run_git(&["symbolic-ref", "--quiet", "--short", "HEAD"], repo_root)
+        .or_else(|| run_git(&["rev-parse", "--short", "HEAD"], repo_root))
+}
+
+fn branch_and_status_cli(repo_root: &Path, need_status: bool) -> (String, GitStatus) {
+    if need_status {
+        let root_for_branch = repo_root.to_path_buf();
+        let root_for_status = repo_root.to_path_buf();
+        join(
+            || current_branch_from_cli(&root_for_branch).unwrap_or_else(|| "HEAD".to_string()),
+            || get_git_status_slow(&root_for_status),
+        )
+    } else {
+        (
+            current_branch_from_cli(repo_root).unwrap_or_else(|| "HEAD".to_string()),
+            GitStatus::empty(),
+        )
+    }
+}
+
+fn run_git(args: &[&str], repo_root: &Path) -> Option<String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
+}
+
 fn validate_git_format(format: &str) -> Result<&str> {
     match format {
         "" | "full" | "f" => Ok("full"),
@@ -110,31 +204,31 @@ impl Module for GitModule {
             });
         }
 
-        // Open repo with minimal operations
-        let repo = match gix::open(&repo_root) {
-            Ok(r) => r,
-            Err(_) => return Ok(None),
-        };
-
-        // Get branch name efficiently
-        let branch_name = if let Ok(Some(head_ref)) = repo.head_ref() {
-            String::from_utf8(head_ref.name().shorten().to_vec())
-                .unwrap_or_else(|_| "HEAD".to_string())
-        } else if let Ok(Some(head_name)) = repo.head_name() {
-            String::from_utf8(head_name.shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
-        } else if let Ok(head) = repo.head() {
-            head.id()
-                .map(|id| id.shorten_or_id().to_string())
-                .unwrap_or_else(|| "HEAD".to_string())
-        } else {
-            "HEAD".to_string()
-        };
-
-        // Get status info based on format
-        let status = match normalized_format {
-            "full" => get_git_status_slow(&repo_root),
-            "short" => GitStatus::empty(),
-            _ => unreachable!("validate_git_format should have caught this"),
+        let need_status = normalized_format == "full";
+        let (branch_name, status) = match gix::ThreadSafeRepository::open(&repo_root) {
+            Ok(repo) => {
+                let repo = Arc::new(repo);
+                if need_status {
+                    let repo_for_branch = Arc::clone(&repo);
+                    let repo_for_status = Arc::clone(&repo);
+                    let repo_root_for_status = repo_root.clone();
+                    join(
+                        || {
+                            let local = repo_for_branch.to_thread_local();
+                            current_branch_from_repo(&local)
+                        },
+                        || {
+                            let local = repo_for_status.to_thread_local();
+                            collect_git_status_fast(&local)
+                                .unwrap_or_else(|| get_git_status_slow(&repo_root_for_status))
+                        },
+                    )
+                } else {
+                    let local = repo.to_thread_local();
+                    (current_branch_from_repo(&local), GitStatus::empty())
+                }
+            }
+            Err(_) => branch_and_status_cli(&repo_root, need_status),
         };
 
         // Cache the result
