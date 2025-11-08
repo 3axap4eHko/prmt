@@ -250,6 +250,7 @@ fn instantiate_module(name: &str) -> Option<ModuleRef> {
     Some(match name {
         "path" => Arc::new(path::PathModule::new()),
         "git" => Arc::new(git::GitModule::new()),
+        "env" => Arc::new(env::EnvModule::new()),
         "ok" => Arc::new(ok::OkModule::new()),
         "fail" => Arc::new(fail::FailModule::new()),
         "rust" => Arc::new(rust::RustModule::new()),
