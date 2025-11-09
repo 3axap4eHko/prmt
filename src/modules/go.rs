@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::memo::{GO_VERSION, memoized_version};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -18,8 +19,12 @@ impl GoModule {
 }
 
 impl Module for GoModule {
+    fn fs_markers(&self) -> &'static [&'static str] {
+        &["go.mod"]
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
-        if utils::find_upward("go.mod").is_none() {
+        if context.marker_path("go.mod").is_none() {
             return Ok(None);
         }
 
@@ -30,29 +35,37 @@ impl Module for GoModule {
         // Validate and normalize format
         let normalized_format = utils::validate_version_format(format, "go")?;
 
-        let output = match Command::new("go").arg("version").output() {
-            Ok(o) if o.status.success() => o,
-            _ => return Ok(None),
-        };
-
-        let version_str = String::from_utf8_lossy(&output.stdout);
-        let version = match version_str.split_whitespace().nth(2) {
-            Some(v) => v.trim_start_matches("go").to_string(),
+        let version = match memoized_version(&GO_VERSION, get_go_version) {
+            Some(v) => v,
             None => return Ok(None),
         };
+        let version_str = version.as_ref();
 
         match normalized_format {
-            "full" => Ok(Some(version)),
+            "full" => Ok(Some(version_str.to_string())),
             "short" => {
-                let parts: Vec<&str> = version.split('.').collect();
+                let parts: Vec<&str> = version_str.split('.').collect();
                 if parts.len() >= 2 {
                     Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Ok(Some(version))
+                    Ok(Some(version_str.to_string()))
                 }
             }
-            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            "major" => Ok(version_str.split('.').next().map(|s| s.to_string())),
             _ => unreachable!("validate_version_format should have caught this"),
         }
     }
+}
+
+#[cold]
+fn get_go_version() -> Option<String> {
+    let output = Command::new("go").arg("version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    version_str
+        .split_whitespace()
+        .nth(2)
+        .map(|v| v.trim_start_matches("go").to_string())
 }

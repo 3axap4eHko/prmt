@@ -1,5 +1,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use prmt::detector::{DetectionContext, detect};
 use prmt::{ModuleContext, ModuleRegistry, Template, execute, parse};
+use std::collections::HashSet;
 use std::hint::black_box;
 use std::time::Duration;
 
@@ -19,6 +21,24 @@ fn setup_registry() -> ModuleRegistry {
     registry.register("ok", Arc::new(ok::OkModule));
     registry.register("fail", Arc::new(fail::FailModule));
     registry
+}
+
+fn detection_for(markers: &[&'static str]) -> DetectionContext {
+    if markers.is_empty() {
+        return DetectionContext::default();
+    }
+
+    let required: HashSet<&str> = markers.iter().copied().collect();
+
+    detect(&required)
+}
+
+fn ctx(no_version: bool, exit_code: Option<i32>, markers: &[&'static str]) -> ModuleContext {
+    ModuleContext {
+        no_version,
+        exit_code,
+        detection: detection_for(markers),
+    }
 }
 
 fn bench_parser_scenarios(c: &mut Criterion) {
@@ -66,45 +86,50 @@ fn bench_template_rendering(c: &mut Criterion) {
     let mut group = c.benchmark_group("template_rendering");
 
     let registry = setup_registry();
-    let context_with_version = ModuleContext {
-        no_version: false,
-        exit_code: Some(0),
-    };
-    let context_no_version = ModuleContext {
-        no_version: true,
-        exit_code: Some(0),
-    };
-    let context_error = ModuleContext {
-        no_version: true,
-        exit_code: Some(1),
-    };
+    let ctx_minimal = ctx(true, Some(0), &[]);
+    let ctx_git = ctx(true, Some(0), &[".git"]);
+    let ctx_error = ctx(true, Some(1), &[".git"]);
+    let ctx_with_versions = ctx(false, Some(0), &[".git", "Cargo.toml", "package.json"]);
+    let ctx_all = ctx(
+        true,
+        Some(0),
+        &[
+            ".git",
+            "Cargo.toml",
+            "package.json",
+            "requirements.txt",
+            "go.mod",
+            "deno.json",
+            "bun.lockb",
+        ],
+    );
 
     let scenarios = vec![
-        ("minimal", "{path}", context_no_version.clone()),
+        ("minimal", "{path}", ctx_minimal.clone()),
         (
             "typical_success",
             "{path:cyan} {git:purple} {ok:green:✓}",
-            context_no_version.clone(),
+            ctx_git.clone(),
         ),
         (
             "typical_error",
             "{path:cyan} {git:purple} {fail:red:✗}",
-            context_error.clone(),
+            ctx_error.clone(),
         ),
         (
             "with_versions",
             "{path} {rust} {node} {git}",
-            context_with_version.clone(),
+            ctx_with_versions.clone(),
         ),
         (
             "complex_styled",
             "{path:cyan.bold:short:[:]} {git:purple.italic::on :}",
-            context_no_version.clone(),
+            ctx_git.clone(),
         ),
         (
             "all_modules",
             "{path} {rust} {node} {python} {go} {deno} {bun} {git} {ok}",
-            context_no_version.clone(),
+            ctx_all.clone(),
         ),
     ];
 
@@ -154,38 +179,32 @@ fn bench_end_to_end_scenarios(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_cache_effectiveness(c: &mut Criterion) {
-    let mut group = c.benchmark_group("cache_effectiveness");
+fn bench_memo_effectiveness(c: &mut Criterion) {
+    let mut group = c.benchmark_group("memo_effectiveness");
 
-    // First call (cold cache)
-    group.bench_function("git_cold_cache", |b| {
+    // First call (nothing memoized)
+    group.bench_function("git_cold_memo", |b| {
         use prmt::Module;
         use prmt::modules::git::GitModule;
 
         let module = GitModule;
-        let context = ModuleContext {
-            no_version: false,
-            exit_code: None,
-        };
+        let context = ctx(false, None, &[".git"]);
 
         b.iter(|| {
-            // Clear cache would go here if we had a method for it
+            // Clear memo would go here if we had a method for it
             module.render(black_box("full"), black_box(&context))
         });
     });
 
-    // Warmed cache
-    group.bench_function("git_warm_cache", |b| {
+    // Warm memo
+    group.bench_function("git_warm_memo", |b| {
         use prmt::Module;
         use prmt::modules::git::GitModule;
 
         let module = GitModule;
-        let context = ModuleContext {
-            no_version: false,
-            exit_code: None,
-        };
+        let context = ctx(false, None, &[".git"]);
 
-        // Warm the cache
+        // Warm the memoized value
         let _ = module.render("full", &context);
 
         b.iter(|| module.render(black_box("full"), black_box(&context)));
@@ -197,10 +216,7 @@ fn bench_cache_effectiveness(c: &mut Criterion) {
         use prmt::modules::rust::RustModule;
 
         let module = RustModule;
-        let context = ModuleContext {
-            no_version: false,
-            exit_code: None,
-        };
+        let context = ctx(false, None, &["Cargo.toml"]);
 
         b.iter(|| module.render(black_box("full"), black_box(&context)));
     });
@@ -211,10 +227,7 @@ fn bench_cache_effectiveness(c: &mut Criterion) {
         use prmt::modules::rust::RustModule;
 
         let module = RustModule;
-        let context = ModuleContext {
-            no_version: true,
-            exit_code: None,
-        };
+        let context = ctx(true, None, &["Cargo.toml"]);
 
         b.iter(|| module.render(black_box("full"), black_box(&context)));
     });
@@ -355,7 +368,7 @@ criterion_group!(
     bench_parser_scenarios,
     bench_template_rendering,
     bench_end_to_end_scenarios,
-    bench_cache_effectiveness,
+    bench_memo_effectiveness,
     bench_string_operations,
     bench_unicode_operations,
     bench_style_parsing,

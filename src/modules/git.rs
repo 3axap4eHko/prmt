@@ -1,14 +1,13 @@
-use crate::cache::{GIT_CACHE, GitInfo};
 use crate::error::{PromptError, Result};
+use crate::memo::{GIT_MEMO, GitInfo};
 use crate::module_trait::{Module, ModuleContext};
-use crate::modules::utils;
 use bitflags::bitflags;
 use gix::bstr::BString;
 use gix::progress::Discard;
 use gix::status::Item as StatusItem;
 use gix::status::index_worktree::iter::Summary as WorktreeSummary;
 use rayon::join;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
@@ -36,10 +35,10 @@ impl GitModule {
 }
 
 #[cold]
-fn get_git_status_slow(repo_root: &PathBuf) -> GitStatus {
+fn get_git_status_slow(repo_root: &Path) -> GitStatus {
     let mut status = GitStatus::empty();
 
-    // Only run git status if not cached
+    // Only run git status if not memoized
     if let Ok(output) = std::process::Command::new("git")
         .arg("status")
         .arg("--porcelain=v1")
@@ -129,11 +128,9 @@ fn current_branch_from_cli(repo_root: &Path) -> Option<String> {
 
 fn branch_and_status_cli(repo_root: &Path, need_status: bool) -> (String, GitStatus) {
     if need_status {
-        let root_for_branch = repo_root.to_path_buf();
-        let root_for_status = repo_root.to_path_buf();
         join(
-            || current_branch_from_cli(&root_for_branch).unwrap_or_else(|| "HEAD".to_string()),
-            || get_git_status_slow(&root_for_status),
+            || current_branch_from_cli(repo_root).unwrap_or_else(|| "HEAD".to_string()),
+            || get_git_status_slow(repo_root),
         )
     } else {
         (
@@ -169,49 +166,53 @@ fn validate_git_format(format: &str) -> Result<&str> {
 }
 
 impl Module for GitModule {
-    fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
+    fn fs_markers(&self) -> &'static [&'static str] {
+        &[".git"]
+    }
+
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         // Validate format first
         let normalized_format = validate_git_format(format)?;
 
         // Fast path: find git directory
-        let git_dir = match utils::find_upward(".git") {
-            Some(d) => d,
+        let git_dir = match context.marker_path(".git") {
+            Some(path) => path,
             None => return Ok(None),
         };
         let repo_root = match git_dir.parent() {
-            Some(p) => p.to_path_buf(),
+            Some(p) => p,
             None => return Ok(None),
         };
 
-        // Check cache first
-        if let Some(cached) = GIT_CACHE.get(&repo_root) {
+        // Check memoized info first
+        if let Some(memoized) = GIT_MEMO.get(repo_root) {
             return Ok(match normalized_format {
                 "full" => {
-                    let mut result = cached.branch.clone();
-                    if cached.has_changes {
+                    let mut result = memoized.branch.clone();
+                    if memoized.has_changes {
                         result.push('*');
                     }
-                    if cached.has_staged {
+                    if memoized.has_staged {
                         result.push('+');
                     }
-                    if cached.has_untracked {
+                    if memoized.has_untracked {
                         result.push('?');
                     }
                     Some(result)
                 }
-                "short" => Some(cached.branch),
+                "short" => Some(memoized.branch),
                 _ => unreachable!("validate_git_format should have caught this"),
             });
         }
 
         let need_status = normalized_format == "full";
-        let (branch_name, status) = match gix::ThreadSafeRepository::open(&repo_root) {
+        let (branch_name, status) = match gix::ThreadSafeRepository::open(repo_root) {
             Ok(repo) => {
                 let repo = Arc::new(repo);
                 if need_status {
                     let repo_for_branch = Arc::clone(&repo);
                     let repo_for_status = Arc::clone(&repo);
-                    let repo_root_for_status = repo_root.clone();
+                    let repo_root_for_status = repo_root;
                     join(
                         || {
                             let local = repo_for_branch.to_thread_local();
@@ -220,7 +221,7 @@ impl Module for GitModule {
                         || {
                             let local = repo_for_status.to_thread_local();
                             collect_git_status_fast(&local)
-                                .unwrap_or_else(|| get_git_status_slow(&repo_root_for_status))
+                                .unwrap_or_else(|| get_git_status_slow(repo_root_for_status))
                         },
                     )
                 } else {
@@ -228,17 +229,17 @@ impl Module for GitModule {
                     (current_branch_from_repo(&local), GitStatus::empty())
                 }
             }
-            Err(_) => branch_and_status_cli(&repo_root, need_status),
+            Err(_) => branch_and_status_cli(repo_root, need_status),
         };
 
-        // Cache the result
+        // Memoize the result for other placeholders during this render
         let info = GitInfo {
             branch: branch_name.clone(),
             has_changes: status.contains(GitStatus::MODIFIED),
             has_staged: status.contains(GitStatus::STAGED),
             has_untracked: status.contains(GitStatus::UNTRACKED),
         };
-        GIT_CACHE.insert(repo_root, info);
+        GIT_MEMO.insert(repo_root.to_path_buf(), info);
 
         // Build result
         Ok(match normalized_format {
