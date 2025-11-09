@@ -2,7 +2,34 @@ use std::fmt::Write;
 
 pub trait ModuleStyle: Sized {
     fn parse(style_str: &str) -> Result<Self, String>;
-    fn apply(&self, text: &str) -> String;
+    fn apply_with_shell(&self, text: &str, shell: Shell) -> String;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Shell {
+    #[default]
+    None,
+    Zsh,
+    Bash,
+}
+
+impl Shell {
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "zsh" => Ok(Shell::Zsh),
+            "bash" => Ok(Shell::Bash),
+            "none" | "" => Ok(Shell::None),
+            _ => Err(format!("Unknown shell: {} (supported: zsh, bash, none)", s)),
+        }
+    }
+
+    fn delimiters(&self) -> (&'static str, &'static str) {
+        match self {
+            Shell::Zsh => ("%{", "%}"),
+            Shell::Bash => ("\\[", "\\]"),
+            Shell::None => ("", ""),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +46,9 @@ pub enum Color {
 }
 
 impl Color {
-    fn push_ansi_code(&self, buf: &mut String) {
+    fn push_ansi_code(&self, buf: &mut String, shell: Shell) {
+        let (start, end) = shell.delimiters();
+        buf.push_str(start);
         match self {
             Color::Black => buf.push_str("\x1b[30m"),
             Color::Red => buf.push_str("\x1b[31m"),
@@ -35,6 +64,7 @@ impl Color {
                 }
             }
         }
+        buf.push_str(end);
     }
 }
 
@@ -83,15 +113,15 @@ impl ModuleStyle for AnsiStyle {
         Ok(style)
     }
 
-    fn apply(&self, text: &str) -> String {
+    fn apply_with_shell(&self, text: &str, shell: Shell) -> String {
         if !self.has_style() {
             return text.to_string();
         }
 
         let mut output = String::with_capacity(text.len() + 16);
-        self.write_start_codes(&mut output);
+        self.write_start_codes(&mut output, shell);
         output.push_str(text);
-        self.write_reset(&mut output);
+        self.write_reset(&mut output, shell);
         output
     }
 }
@@ -124,33 +154,55 @@ impl AnsiStyle {
             || self.strikethrough
     }
 
-    pub fn write_start_codes(&self, buf: &mut String) {
+    #[allow(dead_code)]
+    pub fn apply(&self, text: &str) -> String {
+        self.apply_with_shell(text, Shell::None)
+    }
+
+    pub fn write_start_codes(&self, buf: &mut String, shell: Shell) {
+        let (start, end) = shell.delimiters();
+        
         if let Some(ref color) = self.color {
-            color.push_ansi_code(buf);
+            color.push_ansi_code(buf, shell);
         }
         if self.bold {
+            buf.push_str(start);
             buf.push_str("\x1b[1m");
+            buf.push_str(end);
         }
         if self.dim {
+            buf.push_str(start);
             buf.push_str("\x1b[2m");
+            buf.push_str(end);
         }
         if self.italic {
+            buf.push_str(start);
             buf.push_str("\x1b[3m");
+            buf.push_str(end);
         }
         if self.underline {
+            buf.push_str(start);
             buf.push_str("\x1b[4m");
+            buf.push_str(end);
         }
         if self.reverse {
+            buf.push_str(start);
             buf.push_str("\x1b[7m");
+            buf.push_str(end);
         }
         if self.strikethrough {
+            buf.push_str(start);
             buf.push_str("\x1b[9m");
+            buf.push_str(end);
         }
     }
 
-    pub fn write_reset(&self, buf: &mut String) {
+    pub fn write_reset(&self, buf: &mut String, shell: Shell) {
         if self.has_style() {
+            let (start, end) = shell.delimiters();
+            buf.push_str(start);
             buf.push_str("\x1b[0m");
+            buf.push_str(end);
         }
     }
 }

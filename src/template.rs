@@ -55,7 +55,7 @@ impl<'a> Template<'a> {
                                 }
                             })?;
 
-                            style.write_start_codes(&mut output);
+                            style.write_start_codes(&mut output, context.shell);
                             if has_prefix {
                                 output.push_str(&params.prefix);
                             }
@@ -63,7 +63,7 @@ impl<'a> Template<'a> {
                             if has_suffix {
                                 output.push_str(&params.suffix);
                             }
-                            style.write_reset(&mut output);
+                            style.write_reset(&mut output, context.shell);
                         } else {
                             if has_prefix {
                                 output.push_str(&params.prefix);

@@ -37,6 +37,10 @@ struct Cli {
 
     #[arg(long)]
     no_color: bool,
+
+    /// Target shell for proper escape sequence handling (zsh, bash, none)
+    #[arg(long, value_name = "SHELL")]
+    shell: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -48,10 +52,22 @@ fn main() -> ExitCode {
         .or_else(|| env::var("PRMT_FORMAT").ok())
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 
+    // Parse shell type
+    let shell = match cli.shell.as_deref() {
+        Some(shell_str) => match style::Shell::from_str(shell_str) {
+            Ok(shell) => shell,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                return ExitCode::FAILURE;
+            }
+        },
+        None => style::Shell::None,
+    };
+
     let result = if cli.bench {
-        handle_bench(&format, cli.no_version, cli.code, cli.no_color)
+        handle_bench(&format, cli.no_version, cli.code, cli.no_color, shell)
     } else {
-        handle_format(&format, cli.no_version, cli.debug, cli.code, cli.no_color)
+        handle_format(&format, cli.no_version, cli.debug, cli.code, cli.no_color, shell)
     };
 
     match result {
@@ -72,10 +88,11 @@ fn handle_format(
     debug: bool,
     exit_code: Option<i32>,
     no_color: bool,
+    shell: style::Shell,
 ) -> Result<String> {
     if debug {
         let start = Instant::now();
-        let output = executor::execute(format, no_version, exit_code, no_color)?;
+        let output = executor::execute(format, no_version, exit_code, no_color, shell)?;
         let elapsed = start.elapsed();
 
         eprintln!("Format: {}", format);
@@ -83,7 +100,7 @@ fn handle_format(
 
         Ok(output)
     } else {
-        executor::execute(format, no_version, exit_code, no_color).map_err(|e| anyhow::anyhow!(e))
+        executor::execute(format, no_version, exit_code, no_color, shell).map_err(|e| anyhow::anyhow!(e))
     }
 }
 
@@ -92,12 +109,13 @@ fn handle_bench(
     no_version: bool,
     exit_code: Option<i32>,
     no_color: bool,
+    shell: style::Shell,
 ) -> Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code, no_color)
+        let _ = executor::execute(format, no_version, exit_code, no_color, shell)
             .map_err(|e| anyhow::anyhow!(e))?;
         times.push(start.elapsed());
     }

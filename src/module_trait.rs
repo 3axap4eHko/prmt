@@ -1,10 +1,12 @@
 use crate::error::Result;
+use crate::style::Shell;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Default)]
 pub struct ModuleContext {
     pub no_version: bool,
     pub exit_code: Option<i32>,
+    pub shell: Shell,
 }
 
 pub trait Module: Send + Sync {

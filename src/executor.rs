@@ -160,10 +160,12 @@ pub fn execute(
     no_version: bool,
     exit_code: Option<i32>,
     no_color: bool,
+    shell: crate::style::Shell,
 ) -> Result<String> {
     let context = ModuleContext {
         no_version,
         exit_code,
+        shell,
     };
 
     let tokens = parse(format_str);
@@ -206,7 +208,7 @@ fn render_placeholder(
         module: params.module.clone(),
         error,
     })?;
-    let styled = style.apply(&segment);
+    let styled = style.apply_with_shell(&segment, context.shell);
     Ok(Some(styled))
 }
 
