@@ -1,5 +1,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use prmt::detector::{DetectionContext, detect};
 use prmt::{ModuleContext, ModuleRegistry, Template, execute};
+use std::collections::HashSet;
 use std::hint::black_box;
 
 fn setup_registry() -> ModuleRegistry {
@@ -14,6 +16,24 @@ fn setup_registry() -> ModuleRegistry {
     registry.register("ok", Arc::new(ok::OkModule));
     registry.register("fail", Arc::new(fail::FailModule));
     registry
+}
+
+fn detection_for(markers: &[&'static str]) -> DetectionContext {
+    if markers.is_empty() {
+        return DetectionContext::default();
+    }
+
+    let required: HashSet<&str> = markers.iter().copied().collect();
+
+    detect(&required)
+}
+
+fn ctx(no_version: bool, exit_code: Option<i32>, markers: &[&'static str]) -> ModuleContext {
+    ModuleContext {
+        no_version,
+        exit_code,
+        detection: detection_for(markers),
+    }
 }
 
 fn bench_parser(c: &mut Criterion) {
@@ -53,24 +73,23 @@ fn bench_renderer(c: &mut Criterion) {
     let mut group = c.benchmark_group("renderer");
 
     let registry = setup_registry();
-    let context = ModuleContext {
-        no_version: true,
-        exit_code: Some(0),
-    };
+    let ctx_path = ctx(true, Some(0), &[]);
+    let ctx_git = ctx(true, Some(0), &[".git"]);
+    let ctx_full = ctx(true, Some(0), &[".git", "Cargo.toml", "package.json"]);
 
     group.bench_function("path_only", |b| {
         let template = Template::new("{path:cyan}");
-        b.iter(|| template.render(black_box(&registry), black_box(&context)));
+        b.iter(|| template.render(black_box(&registry), black_box(&ctx_path)));
     });
 
     group.bench_function("path_and_git", |b| {
         let template = Template::new("{path:cyan} {git:purple}");
-        b.iter(|| template.render(black_box(&registry), black_box(&context)));
+        b.iter(|| template.render(black_box(&registry), black_box(&ctx_git)));
     });
 
     group.bench_function("all_modules", |b| {
         let template = Template::new("{path:cyan} {rust:red} {node:green} {git:purple}");
-        b.iter(|| template.render(black_box(&registry), black_box(&context)));
+        b.iter(|| template.render(black_box(&registry), black_box(&ctx_full)));
     });
 
     group.finish();
@@ -104,10 +123,7 @@ fn bench_git_module(c: &mut Criterion) {
     let mut group = c.benchmark_group("git_module");
 
     let module = GitModule::new();
-    let context = ModuleContext {
-        no_version: false,
-        exit_code: None,
-    };
+    let context = ctx(false, None, &[".git"]);
 
     group.bench_function("branch_only", |b| {
         b.iter(|| module.render(black_box("short"), black_box(&context)));
@@ -125,15 +141,8 @@ fn bench_version_modules(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("version_modules");
 
-    let context_no_version = ModuleContext {
-        no_version: true,
-        exit_code: None,
-    };
-
-    let context_with_version = ModuleContext {
-        no_version: false,
-        exit_code: None,
-    };
+    let context_no_version = ctx(true, None, &["Cargo.toml"]);
+    let context_with_version = ctx(false, None, &["Cargo.toml"]);
 
     // Benchmark Rust module
     {
@@ -144,8 +153,8 @@ fn bench_version_modules(c: &mut Criterion) {
             b.iter(|| module.render(black_box(""), black_box(&context_no_version)));
         });
 
-        group.bench_function("rust_with_version_cached", |b| {
-            // Warm up cache
+        group.bench_function("rust_with_version_memoized", |b| {
+            // Warm up memoized value
             let _ = module.render("", &context_with_version);
 
             b.iter(|| module.render(black_box(""), black_box(&context_with_version)));

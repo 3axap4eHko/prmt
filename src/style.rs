@@ -1,4 +1,31 @@
 use std::fmt::Write;
+use std::sync::atomic::{AtomicU8, Ordering};
+
+const COLOR_UNKNOWN: u8 = 0;
+const COLOR_FALSE: u8 = 1;
+const COLOR_TRUE: u8 = 2;
+
+static NO_COLOR_STATE: AtomicU8 = AtomicU8::new(COLOR_UNKNOWN);
+
+pub fn global_no_color() -> bool {
+    match NO_COLOR_STATE.load(Ordering::Relaxed) {
+        COLOR_TRUE => true,
+        COLOR_FALSE => false,
+        _ => {
+            let detected = std::env::var_os("NO_COLOR").is_some();
+            NO_COLOR_STATE.store(
+                if detected { COLOR_TRUE } else { COLOR_FALSE },
+                Ordering::Relaxed,
+            );
+            detected
+        }
+    }
+}
+
+#[cfg(test)]
+pub fn reset_global_no_color_for_tests() {
+    NO_COLOR_STATE.store(COLOR_UNKNOWN, Ordering::Relaxed);
+}
 
 pub trait ModuleStyle: Sized {
     fn parse(style_str: &str) -> Result<Self, String>;
@@ -158,6 +185,20 @@ impl AnsiStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use std::env;
+
+    fn unset_no_color() {
+        unsafe {
+            env::remove_var("NO_COLOR");
+        }
+    }
+
+    fn set_no_color() {
+        unsafe {
+            env::set_var("NO_COLOR", "1");
+        }
+    }
 
     #[test]
     fn test_parse_simple_color() {
@@ -194,5 +235,38 @@ mod tests {
         let style = AnsiStyle::parse("").unwrap();
         let result = style.apply("test");
         assert_eq!(result, "test");
+    }
+
+    #[test]
+    #[serial]
+    fn global_no_color_respects_env() {
+        unset_no_color();
+        reset_global_no_color_for_tests();
+        assert!(!global_no_color());
+
+        set_no_color();
+        reset_global_no_color_for_tests();
+        assert!(global_no_color());
+
+        unset_no_color();
+        reset_global_no_color_for_tests();
+    }
+
+    #[test]
+    #[serial]
+    fn global_no_color_caches_until_reset() {
+        unset_no_color();
+        reset_global_no_color_for_tests();
+        assert!(!global_no_color());
+
+        set_no_color();
+        // Without reset we still expect false due to caching
+        assert!(!global_no_color());
+
+        reset_global_no_color_for_tests();
+        assert!(global_no_color());
+
+        unset_no_color();
+        reset_global_no_color_for_tests();
     }
 }

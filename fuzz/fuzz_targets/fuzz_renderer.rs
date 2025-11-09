@@ -1,6 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use prmt::{Template, ModuleRegistry, ModuleContext};
+use prmt::detector::DetectionContext;
+use prmt::{ModuleContext, ModuleRegistry, Template};
 use std::sync::Arc;
 
 fn setup_registry() -> ModuleRegistry {
@@ -20,6 +21,7 @@ fuzz_target!(|data: &[u8]| {
         let context = ModuleContext {
             no_version: true,
             exit_code: Some(0),
+            detection: DetectionContext::default(),
         };
         
         let _ = template.render(&registry, &context);
