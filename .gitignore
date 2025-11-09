@@ -16,3 +16,9 @@ Thumbs.db
 
 # Debug
 *.log
+packaging/arch/v*.tar.gz
+packaging/arch/prmt-debug-*-1-x86_64.pkg.tar.zst
+packaging/arch/prmt-*-1-x86_64.pkg.tar.zst
+packaging/arch/src
+packaging/arch/prmt/v*.tar.gz
+packaging/arch/pkg
