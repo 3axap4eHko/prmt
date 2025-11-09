@@ -38,7 +38,6 @@ struct Cli {
     #[arg(long)]
     no_color: bool,
 
-    /// Target shell for proper escape sequence handling (zsh, bash, none)
     #[arg(long, value_name = "SHELL")]
     shell: Option<String>,
 }
@@ -52,7 +51,6 @@ fn main() -> ExitCode {
         .or_else(|| env::var("PRMT_FORMAT").ok())
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 
-    // Parse shell type
     let shell = match cli.shell.as_deref() {
         Some(shell_str) => match style::Shell::from_str(shell_str) {
             Ok(shell) => shell,
