@@ -12,9 +12,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:x86_64-musl }
-          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:armvirt-64-musl }
-          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:arm-cortex-a7_neon-vfpv4-musl }
+          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:x86_64-openwrt-23.05 }
+          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:armvirt-64-openwrt-23.05 }
+          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:arm-cortex-a7_neon-vfpv4-openwrt-23.05 }
     container:
       image: ${{ matrix.sdk }}
       options: --user root
