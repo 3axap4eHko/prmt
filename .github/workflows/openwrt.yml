@@ -1,0 +1,93 @@
+name: OpenWrt
+on:
+  workflow_run:
+    workflows: [ "Release" ]
+    types: [ completed ]
+
+jobs:
+  ipk:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:x86_64-musl }
+          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:armvirt-64-musl }
+          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:arm-cortex-a7_neon-vfpv4-musl }
+    container:
+      image: ${{ matrix.sdk }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          tag="${RUN_HEAD_BRANCH}"
+          if [[ -z "$tag" ]]; then
+            tag="$(git tag --points-at "$RUN_HEAD_SHA" | head -n1)"
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "Unable to determine tag for ${RUN_HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download and verify release archive
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          REPO: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          mkdir -p /work && cd /work
+          file="prmt-${{ matrix.target }}-${{ matrix.asset_os }}.tar.gz"
+          curl -sSfL -H "Authorization: Bearer ${GITHUB_TOKEN}" -o "$file" \
+            "https://github.com/${REPO}/releases/download/${TAG}/$file"
+          curl -sSfL -H "Authorization: Bearer ${GITHUB_TOKEN}" -o "${file}.sha256" \
+            "https://github.com/${REPO}/releases/download/${TAG}/${file}.sha256"
+          sha256sum -c "${file}.sha256"
+          tar -xzf "$file" -C /work
+
+      - name: Build .ipk
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          REPO: ${{ github.repository }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euxo pipefail
+          cd /work
+          d=$(find . -maxdepth 1 -type d -name 'prmt-*' | head -n1)
+          test -n "$d"
+          install -Dm755 "$d/prmt" ./pkg/usr/bin/prmt
+          install -Dm644 "$d/LICENSE" ./pkg/usr/share/licenses/prmt/LICENSE
+
+          mkdir -p ./pkg/CONTROL
+          {
+            printf 'Package: prmt\n'
+            printf 'Version: %s\n' "$VERSION"
+            printf 'Architecture: %s\n' "$ARCH"
+            printf 'Section: utils\n'
+            printf 'Priority: optional\n'
+            printf 'Depends:\n'
+            printf 'Source: https://github.com/%s\n' "$REPO"
+            printf 'Description: Ultra-fast customizable shell prompt (static Rust binary)\n'
+          } > ./pkg/CONTROL/control
+
+          ipkg-build -o root -g root ./pkg
+          mkdir -p /out
+          mv *.ipk /out/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-${{ matrix.arch }}
+          path: |
+            /out/*.ipk
