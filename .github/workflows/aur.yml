@@ -1,0 +1,110 @@
+name: AUR
+on:
+  workflow_run:
+    workflows: [ "Release" ]
+    types: [ completed ]
+
+jobs:
+  pkgbuild:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Prepare Arch toolchain
+        run: |
+          pacman -Syu --noconfirm base-devel git fakeroot curl
+
+      - uses: actions/checkout@v4
+
+      - name: Create builder user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          tag="${RUN_HEAD_BRANCH}"
+          if [[ -z "$tag" ]]; then
+            tag="$(git tag --points-at "$RUN_HEAD_SHA" | head -n1)"
+          fi
+          if [[ -z "$tag" ]]; then
+            echo "Unable to determine tag for ${RUN_HEAD_SHA}" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release checksums
+        id: sums
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          specs=(
+            "x86_64:x86_64-unknown-linux-musl:ubuntu-24.04"
+            "aarch64:aarch64-unknown-linux-musl:ubuntu-24.04"
+            "armv7h:armv7-unknown-linux-musleabihf:ubuntu-24.04"
+          )
+          for spec in "${specs[@]}"; do
+            IFS=':' read -r arch target os_label <<<"$spec"
+            asset="prmt-${target}-${os_label}.tar.gz"
+            url="https://github.com/${REPO}/releases/download/${TAG}/${asset}.sha256"
+            checksum="$(curl -sSfL -H "Authorization: Bearer ${GITHUB_TOKEN}" "$url" | awk '{print $1}')"
+            echo "sha256_${arch}=${checksum}" >> "$GITHUB_OUTPUT"
+            echo "asset_${arch}=${asset}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Generate PKGBUILD and .SRCINFO
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          SHA256_X86_64: ${{ steps.sums.outputs.sha256_x86_64 }}
+          SHA256_AARCH64: ${{ steps.sums.outputs.sha256_aarch64 }}
+          SHA256_ARMV7H: ${{ steps.sums.outputs.sha256_armv7h }}
+          ASSET_X86_64: ${{ steps.sums.outputs.asset_x86_64 }}
+          ASSET_AARCH64: ${{ steps.sums.outputs.asset_aarch64 }}
+          ASSET_ARMV7H: ${{ steps.sums.outputs.asset_armv7h }}
+        run: |
+          set -euo pipefail
+          cat > PKGBUILD <<EOF
+          pkgname=prmt-bin
+          pkgver=${VERSION}
+          pkgrel=1
+          pkgdesc='Ultra-fast customizable shell prompt (single Rust binary)'
+          arch=('x86_64' 'aarch64' 'armv7h')
+          url='https://github.com/3axap4eHko/prmt'
+          license=('MIT')
+          provides=('prmt')
+          conflicts=('prmt')
+          source_x86_64=("https://github.com/3axap4eHko/prmt/releases/download/v${VERSION}/${ASSET_X86_64}")
+          source_aarch64=("https://github.com/3axap4eHko/prmt/releases/download/v${VERSION}/${ASSET_AARCH64}")
+          source_armv7h=("https://github.com/3axap4eHko/prmt/releases/download/v${VERSION}/${ASSET_ARMV7H}")
+          sha256sums_x86_64=('${SHA256_X86_64}')
+          sha256sums_aarch64=('${SHA256_AARCH64}')
+          sha256sums_armv7h=('${SHA256_ARMV7H}')
+          package() {
+            tar -xzf prmt-*.tar.gz
+            install -Dm755 prmt*/prmt "$pkgdir/usr/bin/prmt"
+            install -Dm644 prmt*/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+          }
+          EOF
+          chown builder:builder PKGBUILD
+          runuser -u builder -- bash -c '
+            set -euo pipefail
+            cd "$GITHUB_WORKSPACE"
+            makepkg --printsrcinfo > .SRCINFO
+          '
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aur
+          path: |
+            PKGBUILD
+            .SRCINFO

@@ -1,95 +1,157 @@
 name: Release
-
 on:
   push:
-    tags:
-      - 'v*'
+    tags: [ "v*" ]
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: prmt
-            asset_name: prmt-linux-amd64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact_name: prmt
-            asset_name: prmt-linux-musl-amd64
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: prmt.exe
-            asset_name: prmt-windows-amd64.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: prmt
-            asset_name: prmt-macos-amd64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: prmt
-            asset_name: prmt-macos-arm64
-    
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { os: ubuntu-24.04, target: x86_64-unknown-linux-musl }
+          - { os: ubuntu-24.04, target: aarch64-unknown-linux-musl }
+          - { os: ubuntu-24.04, target: armv7-unknown-linux-musleabihf }
+          - { os: macos-15-intel, target: x86_64-apple-darwin }
+          - { os: macos-14,       target: aarch64-apple-darwin }
+          - { os: macos-15,       target: aarch64-apple-darwin }
+          - { os: windows-2022,   target: x86_64-pc-windows-msvc }
+
     steps:
-      - uses: actions/checkout@v5
-      
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      
-      - name: Install musl tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: sudo apt-get install -y musl-tools
-      
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-      
-      - name: Upload artifacts
+
+      - uses: Swatinem/rust-cache@v2
+
+      - if: runner.os == 'Linux' && contains(matrix.target, 'musl')
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install cargo-zigbuild
+        if: runner.os == 'Linux' && contains(matrix.target, 'musl')
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Build binary
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          USE_ZIGBUILD: ${{ runner.os == 'Linux' && contains(matrix.target, 'musl') }}
+        run: |
+          set -euo pipefail
+          if [[ "$USE_ZIGBUILD" == "true" ]]; then
+            cargo zigbuild --release --locked --target "$TARGET"
+          else
+            cargo build --release --locked --target "$TARGET"
+          fi
+
+      - name: Package archive (Unix)
+        if: runner.os != 'Windows'
+        id: package_unix
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          OS_LABEL: ${{ matrix.os }}
+        run: |
+          set -euo pipefail
+          artifact="prmt-${TARGET}-${OS_LABEL}"
+          dist="$GITHUB_WORKSPACE/dist"
+          staging="$dist/$artifact"
+          rm -rf "$staging"
+          mkdir -p "$staging"
+          cp "target/${TARGET}/release/prmt" "$staging/prmt"
+          cp LICENSE "$staging/LICENSE"
+          tar -C "$dist" -czf "$dist/${artifact}.tar.gz" "$artifact"
+          pushd "$dist" >/dev/null
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${artifact}.tar.gz" > "${artifact}.tar.gz.sha256"
+          else
+            shasum -a 256 "${artifact}.tar.gz" > "${artifact}.tar.gz.sha256"
+          fi
+          popd >/dev/null
+
+      - name: Package archive (Windows)
+        if: runner.os == 'Windows'
+        id: package_windows
+        shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          OS_LABEL: ${{ matrix.os }}
+        run: |
+          $artifact = "prmt-$env:TARGET-$env:OS_LABEL"
+          $dist = Join-Path $env:GITHUB_WORKSPACE 'dist'
+          $binary = Join-Path $env:GITHUB_WORKSPACE "target/$env:TARGET/release/prmt.exe"
+          if (!(Test-Path $dist)) {
+            New-Item $dist -ItemType Directory | Out-Null
+          }
+          $staging = Join-Path $dist $artifact
+          if (Test-Path $staging) {
+            Remove-Item $staging -Recurse -Force
+          }
+          New-Item $staging -ItemType Directory -Force | Out-Null
+          Copy-Item $binary "$staging/prmt.exe"
+          Copy-Item "LICENSE" "$staging/LICENSE"
+          Compress-Archive -Path "$staging/*" -DestinationPath "$dist/$artifact.zip" -Force
+          Push-Location $dist
+          $hash = Get-FileHash "$artifact.zip" -Algorithm SHA256
+          $entry = "{0}  {1}" -f $hash.Hash.ToLower(), "$artifact.zip"
+          Set-Content -Path "$artifact.zip.sha256" -Value $entry -Encoding ASCII
+          Pop-Location
+
+      - name: Upload build artifact (Unix)
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset_name }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-  
-  create-release:
-    name: Create Release
-    needs: build-and-release
-    runs-on: ubuntu-latest
+          name: prmt-${{ matrix.target }}-${{ matrix.os }}
+          path: |
+            dist/prmt-${{ matrix.target }}-${{ matrix.os }}.tar.gz
+            dist/prmt-${{ matrix.target }}-${{ matrix.os }}.tar.gz.sha256
+
+      - name: Upload build artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prmt-${{ matrix.target }}-${{ matrix.os }}
+          path: |
+            dist/prmt-${{ matrix.target }}-${{ matrix.os }}.zip
+            dist/prmt-${{ matrix.target }}-${{ matrix.os }}.zip.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
-      
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          for dir in artifacts/*/; do
-            if [ -d "$dir" ]; then
-              asset_name=$(basename "$dir")
-              # Find the binary file (prmt or prmt.exe)
-              binary=$(find "$dir" -type f \( -name "prmt" -o -name "prmt.exe" \) | head -1)
-              if [ -n "$binary" ]; then
-                cp "$binary" "release-assets/${asset_name}"
-              fi
-            fi
-          done
-          ls -la release-assets/
-      
-      - name: Create Release
+          merge-multiple: true
+
+      - name: Publish release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          tag_name="${GITHUB_REF#refs/tags/}"
-          gh release create "$tag_name" \
-            --title "Release $tag_name" \
-            --generate-notes \
-            release-assets/*
+          set -euo pipefail
+          tag="$TAG_NAME"
+          state="$(gh release view "$tag" --json draft -q '.draft' 2>/dev/null || echo 'not_found')"
+          publish_after_upload=false
+          if [[ "$state" == "not_found" ]]; then
+            gh release create "$tag" --draft --title "Release $tag" --generate-notes
+            publish_after_upload=true
+          elif [[ "$state" == "true" ]]; then
+            publish_after_upload=true
+          fi
+
+          gh release upload "$tag" artifacts/* --clobber
+
+          if [[ "$publish_after_upload" == "true" ]]; then
+            gh release edit "$tag" --draft=false --latest
+          fi
