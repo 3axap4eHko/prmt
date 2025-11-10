@@ -1,12 +1,12 @@
+use crate::detector::{DetectionContext, detect};
 use crate::error::{PromptError, Result};
 use crate::module_trait::{ModuleContext, ModuleRef};
 use crate::parser::{Params, Token, parse};
 use crate::registry::ModuleRegistry;
-use crate::style::{AnsiStyle, ModuleStyle};
+use crate::style::{AnsiStyle, ModuleStyle, global_no_color};
 use rayon::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::env;
 use std::sync::{Arc, OnceLock};
 
 #[inline]
@@ -44,7 +44,15 @@ pub fn render_template(
     no_color: bool,
 ) -> Result<String> {
     let tokens = parse(template);
-    render_tokens(tokens, registry, context, no_color, template.len())
+    let placeholder_count = count_placeholders(&tokens);
+    render_tokens(
+        tokens,
+        registry,
+        context,
+        no_color,
+        template.len(),
+        placeholder_count,
+    )
 }
 
 fn render_tokens<'a>(
@@ -53,14 +61,9 @@ fn render_tokens<'a>(
     context: &ModuleContext,
     no_color: bool,
     template_len: usize,
+    placeholder_count: usize,
 ) -> Result<String> {
-    let dynamic_count = tokens
-        .iter()
-        .filter(|token| matches!(token, Token::Placeholder(_)))
-        .count();
-    let no_color = no_color || env::var("NO_COLOR").is_ok();
-
-    if dynamic_count <= 1 {
+    if placeholder_count <= 1 {
         return render_tokens_sequential(tokens, registry, context, no_color, template_len);
     }
 
@@ -161,14 +164,28 @@ pub fn execute(
     exit_code: Option<i32>,
     no_color: bool,
 ) -> Result<String> {
+    let tokens = parse(format_str);
+    let (registry, placeholder_count) = build_registry(&tokens)?;
+    let required_markers = registry.required_markers();
+    let detection = if required_markers.is_empty() {
+        DetectionContext::default()
+    } else {
+        detect(&required_markers)
+    };
     let context = ModuleContext {
         no_version,
         exit_code,
+        detection,
     };
-
-    let tokens = parse(format_str);
-    let registry = build_registry(&tokens)?;
-    render_tokens(tokens, &registry, &context, no_color, format_str.len())
+    let resolved_no_color = no_color || global_no_color();
+    render_tokens(
+        tokens,
+        &registry,
+        &context,
+        resolved_no_color,
+        format_str.len(),
+        placeholder_count,
+    )
 }
 
 fn render_placeholder(
@@ -227,12 +244,21 @@ fn compute_slot(slot: &RenderSlot<'_>, context: &ModuleContext, no_color: bool) 
     Ok(())
 }
 
-fn build_registry(tokens: &[Token<'_>]) -> Result<ModuleRegistry> {
+fn count_placeholders(tokens: &[Token<'_>]) -> usize {
+    tokens
+        .iter()
+        .filter(|token| matches!(token, Token::Placeholder(_)))
+        .count()
+}
+
+fn build_registry(tokens: &[Token<'_>]) -> Result<(ModuleRegistry, usize)> {
     let mut registry = ModuleRegistry::new();
     let mut required: HashSet<&str> = HashSet::new();
+    let mut placeholder_count = 0usize;
 
     for token in tokens {
         if let Token::Placeholder(params) = token {
+            placeholder_count += 1;
             let name = params.module.as_str();
             if required.insert(name) {
                 let module = instantiate_module(name)
@@ -242,7 +268,7 @@ fn build_registry(tokens: &[Token<'_>]) -> Result<ModuleRegistry> {
         }
     }
 
-    Ok(registry)
+    Ok((registry, placeholder_count))
 }
 
 fn instantiate_module(name: &str) -> Option<ModuleRef> {

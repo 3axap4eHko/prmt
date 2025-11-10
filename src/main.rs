@@ -1,50 +1,118 @@
 use anyhow::Result;
-use clap::Parser;
 use std::env;
 use std::process::ExitCode;
 use std::time::Instant;
 
-mod cache;
+mod detector;
 mod error;
 mod executor;
+mod memo;
 mod module_trait;
 mod modules;
 mod parser;
 mod registry;
 mod style;
 
-#[derive(Parser)]
-#[command(name = "prmt")]
-#[command(about = "Ultra-fast customizable shell prompt generator")]
-#[command(version)]
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const HELP: &str = "\
+prmt - Ultra-fast customizable shell prompt generator
+
+USAGE:
+    prmt [OPTIONS] [FORMAT]
+
+ARGS:
+    <FORMAT>           Format string (default from PRMT_FORMAT env var)
+
+OPTIONS:
+    -f, --format <FORMAT>    Format string
+    -n, --no-version        Skip version detection for speed
+    -d, --debug             Show debug information and timing
+    -b, --bench             Run benchmark (100 iterations)
+        --code <CODE>       Exit code of the last command (for ok/fail modules)
+        --no-color          Disable colored output
+    -h, --help             Print help
+    -V, --version          Print version
+";
+
 struct Cli {
     format: Option<String>,
-
-    #[arg(short = 'f', long)]
-    format_flag: Option<String>,
-
-    #[arg(short = 'n', long)]
     no_version: bool,
-
-    #[arg(short = 'd', long)]
     debug: bool,
-
-    #[arg(short = 'b', long)]
     bench: bool,
-
-    #[arg(long)]
     code: Option<i32>,
-
-    #[arg(long)]
     no_color: bool,
 }
 
+fn parse_args() -> Result<Cli> {
+    use lexopt::prelude::*;
+
+    let mut format = None;
+    let mut no_version = false;
+    let mut debug = false;
+    let mut bench = false;
+    let mut code = None;
+    let mut no_color = false;
+
+    let mut parser = lexopt::Parser::from_env();
+    while let Some(arg) = parser.next()? {
+        match arg {
+            Short('h') | Long("help") => {
+                print!("{}", HELP);
+                std::process::exit(0);
+            }
+            Short('V') | Long("version") => {
+                println!("prmt {}", VERSION);
+                std::process::exit(0);
+            }
+            Short('f') | Long("format") => {
+                format = Some(parser.value()?.string()?);
+            }
+            Short('n') | Long("no-version") => {
+                no_version = true;
+            }
+            Short('d') | Long("debug") => {
+                debug = true;
+            }
+            Short('b') | Long("bench") => {
+                bench = true;
+            }
+            Long("code") => {
+                code = Some(parser.value()?.parse()?);
+            }
+            Long("no-color") => {
+                no_color = true;
+            }
+            Value(val) => {
+                if format.is_none() {
+                    format = Some(val.string()?);
+                }
+            }
+            _ => return Err(arg.unexpected().into()),
+        }
+    }
+
+    Ok(Cli {
+        format,
+        no_version,
+        debug,
+        bench,
+        code,
+        no_color,
+    })
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = match parse_args() {
+        Ok(cli) => cli,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            eprintln!("Try 'prmt --help' for more information.");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let format = cli
         .format
-        .or(cli.format_flag)
         .or_else(|| env::var("PRMT_FORMAT").ok())
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 

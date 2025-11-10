@@ -28,7 +28,7 @@ name = "comprehensive_bench"
 harness = false
 
 [dependencies]
-clap = { version = "4.5", features = ["derive", "env"] }
+lexopt = "0.3"
 colored = "3"
 gix  = { version = "0.74.1", default-features = false, features = ["max-performance-safe", "revision", "status"] }
 rayon = "1"

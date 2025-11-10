@@ -1,5 +1,5 @@
-use crate::cache::VERSION_CACHE;
 use crate::error::Result;
+use crate::memo::{NODE_VERSION, memoized_version};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -31,8 +31,12 @@ fn get_node_version() -> Option<String> {
 }
 
 impl Module for NodeModule {
+    fn fs_markers(&self) -> &'static [&'static str] {
+        &["package.json"]
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
-        if utils::find_upward("package.json").is_none() {
+        if context.marker_path("package.json").is_none() {
             return Ok(None);
         }
 
@@ -43,33 +47,24 @@ impl Module for NodeModule {
         // Validate and normalize format
         let normalized_format = utils::validate_version_format(format, "node")?;
 
-        // Check cache first
-        let cache_key = "node_version";
-        let version = if let Some(cached) = VERSION_CACHE.get(cache_key) {
-            match cached {
-                Some(v) => v,
-                None => return Ok(None),
-            }
-        } else {
-            let version = get_node_version();
-            VERSION_CACHE.insert(cache_key.to_string(), version.clone());
-            match version {
-                Some(v) => v,
-                None => return Ok(None),
-            }
+        // Check memoized value first
+        let version = match memoized_version(&NODE_VERSION, get_node_version) {
+            Some(v) => v,
+            None => return Ok(None),
         };
+        let version_str = version.as_ref();
 
         match normalized_format {
-            "full" => Ok(Some(version)),
+            "full" => Ok(Some(version_str.to_string())),
             "short" => {
-                let parts: Vec<&str> = version.split('.').collect();
+                let parts: Vec<&str> = version_str.split('.').collect();
                 if parts.len() >= 2 {
                     Ok(Some(format!("{}.{}", parts[0], parts[1])))
                 } else {
-                    Ok(Some(version))
+                    Ok(Some(version_str.to_string()))
                 }
             }
-            "major" => Ok(version.split('.').next().map(|s| s.to_string())),
+            "major" => Ok(version_str.split('.').next().map(|s| s.to_string())),
             _ => unreachable!("validate_version_format should have caught this"),
         }
     }
