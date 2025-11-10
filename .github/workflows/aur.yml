@@ -21,6 +21,9 @@ jobs:
           useradd -m builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
 
+      - name: Trust workspace ownership
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Resolve release metadata
         id: meta
         env:
