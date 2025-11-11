@@ -1,5 +1,6 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use prmt::detector::{DetectionContext, detect};
+use prmt::style::Shell;
 use prmt::{ModuleContext, ModuleRegistry, Template, execute};
 use std::collections::HashSet;
 use std::hint::black_box;
@@ -33,6 +34,7 @@ fn ctx(no_version: bool, exit_code: Option<i32>, markers: &[&'static str]) -> Mo
         no_version,
         exit_code,
         detection: detection_for(markers),
+        shell: Shell::None,
     }
 }
 
