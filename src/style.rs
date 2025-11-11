@@ -27,9 +27,44 @@ pub fn reset_global_no_color_for_tests() {
     NO_COLOR_STATE.store(COLOR_UNKNOWN, Ordering::Relaxed);
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Shell {
+    #[default]
+    None,
+    Zsh,
+    Bash,
+}
+
+impl Shell {
+    pub fn from_str(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "zsh" => Ok(Shell::Zsh),
+            "bash" => Ok(Shell::Bash),
+            "none" | "" => Ok(Shell::None),
+            other => Err(format!(
+                "Unknown shell: {} (supported values: bash, zsh, none)",
+                other
+            )),
+        }
+    }
+
+    fn delimiters(self) -> (&'static str, &'static str) {
+        match self {
+            Shell::Zsh => ("%{", "%}"),
+            Shell::Bash => ("\\[", "\\]"),
+            Shell::None => ("", ""),
+        }
+    }
+}
+
 pub trait ModuleStyle: Sized {
     fn parse(style_str: &str) -> Result<Self, String>;
     fn apply(&self, text: &str) -> String;
+
+    fn apply_with_shell(&self, text: &str, shell: Shell) -> String {
+        let _ = shell;
+        self.apply(text)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -111,14 +146,18 @@ impl ModuleStyle for AnsiStyle {
     }
 
     fn apply(&self, text: &str) -> String {
+        self.apply_with_shell(text, Shell::None)
+    }
+
+    fn apply_with_shell(&self, text: &str, shell: Shell) -> String {
         if !self.has_style() {
             return text.to_string();
         }
 
         let mut output = String::with_capacity(text.len() + 16);
-        self.write_start_codes(&mut output);
+        self.write_start_codes(&mut output, shell);
         output.push_str(text);
-        self.write_reset(&mut output);
+        self.write_reset(&mut output, shell);
         output
     }
 }
@@ -151,7 +190,7 @@ impl AnsiStyle {
             || self.strikethrough
     }
 
-    pub fn write_start_codes(&self, buf: &mut String) {
+    fn write_raw_codes(&self, buf: &mut String) {
         if let Some(ref color) = self.color {
             color.push_ansi_code(buf);
         }
@@ -175,9 +214,33 @@ impl AnsiStyle {
         }
     }
 
-    pub fn write_reset(&self, buf: &mut String) {
-        if self.has_style() {
+    pub fn write_start_codes(&self, buf: &mut String, shell: Shell) {
+        if !self.has_style() {
+            return;
+        }
+
+        if shell == Shell::None {
+            self.write_raw_codes(buf);
+        } else {
+            let (start, end) = shell.delimiters();
+            buf.push_str(start);
+            self.write_raw_codes(buf);
+            buf.push_str(end);
+        }
+    }
+
+    pub fn write_reset(&self, buf: &mut String, shell: Shell) {
+        if !self.has_style() {
+            return;
+        }
+
+        if shell == Shell::None {
             buf.push_str("\x1b[0m");
+        } else {
+            let (start, end) = shell.delimiters();
+            buf.push_str(start);
+            buf.push_str("\x1b[0m");
+            buf.push_str(end);
         }
     }
 }
@@ -235,6 +298,22 @@ mod tests {
         let style = AnsiStyle::parse("").unwrap();
         let result = style.apply("test");
         assert_eq!(result, "test");
+    }
+
+    #[test]
+    fn test_apply_with_shell_wraps_bash_sequences() {
+        let style = AnsiStyle::parse("red.bold").unwrap();
+        let result = style.apply_with_shell("ok", Shell::Bash);
+        assert!(result.starts_with("\\[\x1b[31m\x1b[1m\\]"));
+        assert!(result.ends_with("ok\\[\x1b[0m\\]"));
+    }
+
+    #[test]
+    fn test_shell_from_str() {
+        assert_eq!(Shell::from_str("bash").unwrap(), Shell::Bash);
+        assert_eq!(Shell::from_str("ZSH").unwrap(), Shell::Zsh);
+        assert_eq!(Shell::from_str("none").unwrap(), Shell::None);
+        assert!(Shell::from_str("fish").is_err());
     }
 
     #[test]

@@ -1,6 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use prmt::detector::DetectionContext;
+use prmt::style::Shell;
 use prmt::{ModuleContext, ModuleRegistry, Template};
 use std::sync::Arc;
 
@@ -22,6 +23,7 @@ fuzz_target!(|data: &[u8]| {
             no_version: true,
             exit_code: Some(0),
             detection: DetectionContext::default(),
+            shell: Shell::None,
         };
         
         let _ = template.render(&registry, &context);
