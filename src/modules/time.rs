@@ -1,6 +1,9 @@
 use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
-use chrono::Local;
+use libc::c_int;
+use std::convert::TryInto;
+use std::io;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub struct TimeModule;
 
@@ -10,15 +13,43 @@ impl Default for TimeModule {
     }
 }
 
+enum FormatSpec {
+    Hm24,
+    Hms24,
+    Hm12,
+    Hms12,
+}
+
+impl FormatSpec {
+    fn render(&self, parts: &TimeParts) -> String {
+        match self {
+            FormatSpec::Hm24 => format!("{:02}:{:02}", parts.hour24, parts.minute),
+            FormatSpec::Hms24 => format!(
+                "{:02}:{:02}:{:02}",
+                parts.hour24, parts.minute, parts.second
+            ),
+            FormatSpec::Hm12 => {
+                let (hour, suffix) = parts.hour12();
+                format!("{:02}:{:02}{suffix}", hour, parts.minute)
+            }
+            FormatSpec::Hms12 => {
+                let (hour, suffix) = parts.hour12();
+                format!(
+                    "{:02}:{:02}:{:02}{suffix}",
+                    hour, parts.minute, parts.second
+                )
+            }
+        }
+    }
+}
+
 impl Module for TimeModule {
     fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
-        let now = Local::now();
-
-        let formatted = match format {
-            "" | "24h" => now.format("%H:%M"),
-            "12h" | "12H" => now.format("%I:%M%p"),
-            "12hs" | "12HS" => now.format("%I:%M:%S%p"),
-            "24hs" | "24HS" => now.format("%H:%M:%S"),
+        let spec = match format {
+            "" | "24h" => FormatSpec::Hm24,
+            "24hs" | "24HS" => FormatSpec::Hms24,
+            "12h" | "12H" => FormatSpec::Hm12,
+            "12hs" | "12HS" => FormatSpec::Hms12,
             _ => {
                 return Err(PromptError::InvalidFormat {
                     module: "time".to_string(),
@@ -28,8 +59,87 @@ impl Module for TimeModule {
             }
         };
 
-        Ok(Some(formatted.to_string()))
+        let parts = current_local_time()?;
+        Ok(Some(spec.render(&parts)))
     }
+}
+
+#[derive(Clone, Copy)]
+struct TimeParts {
+    hour24: u8,
+    minute: u8,
+    second: u8,
+}
+
+impl TimeParts {
+    fn hour12(&self) -> (u8, &'static str) {
+        let suffix = if self.hour24 >= 12 { "PM" } else { "AM" };
+        let mut hour = self.hour24 % 12;
+        if hour == 0 {
+            hour = 12;
+        }
+        (hour, suffix)
+    }
+}
+
+fn current_local_time() -> Result<TimeParts> {
+    let timestamp = system_time_to_time_t()?;
+    let tm = platform_local_tm(timestamp)?;
+    Ok(TimeParts {
+        hour24: clamp_component(tm.tm_hour, 23),
+        minute: clamp_component(tm.tm_min, 59),
+        second: clamp_component(tm.tm_sec, 60),
+    })
+}
+
+fn system_time_to_time_t() -> Result<libc::time_t> {
+    let duration = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| PromptError::IoError(io::Error::other(err)))?;
+
+    duration
+        .as_secs()
+        .try_into()
+        .map_err(|err| PromptError::IoError(io::Error::other(err)))
+}
+
+fn clamp_component(value: c_int, max: u8) -> u8 {
+    value.clamp(0, max as c_int) as u8
+}
+
+#[cfg(unix)]
+fn platform_local_tm(timestamp: libc::time_t) -> Result<libc::tm> {
+    use std::mem::MaybeUninit;
+
+    unsafe {
+        let mut tm = MaybeUninit::<libc::tm>::uninit();
+        if libc::localtime_r(&timestamp as *const _, tm.as_mut_ptr()).is_null() {
+            return Err(PromptError::IoError(io::Error::last_os_error()));
+        }
+        Ok(tm.assume_init())
+    }
+}
+
+#[cfg(windows)]
+fn platform_local_tm(timestamp: libc::time_t) -> Result<libc::tm> {
+    use std::mem::MaybeUninit;
+
+    unsafe {
+        let mut tm = MaybeUninit::<libc::tm>::uninit();
+        let err = libc::localtime_s(tm.as_mut_ptr(), &timestamp as *const _);
+        if err != 0 {
+            return Err(PromptError::IoError(io::Error::from_raw_os_error(err)));
+        }
+        Ok(tm.assume_init())
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+fn platform_local_tm(_timestamp: libc::time_t) -> Result<libc::tm> {
+    Err(PromptError::IoError(io::Error::new(
+        io::ErrorKind::Other,
+        "time module is not supported on this platform",
+    )))
 }
 
 #[cfg(test)]

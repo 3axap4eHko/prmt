@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::env;
 use std::process::ExitCode;
 use std::time::Instant;
@@ -43,7 +42,7 @@ struct Cli {
     no_color: bool,
 }
 
-fn parse_args() -> Result<Cli> {
+fn parse_args() -> Result<Cli, lexopt::Error> {
     use lexopt::prelude::*;
 
     let mut format = None;
@@ -87,7 +86,7 @@ fn parse_args() -> Result<Cli> {
                     format = Some(val.string()?);
                 }
             }
-            _ => return Err(arg.unexpected().into()),
+            _ => return Err(arg.unexpected()),
         }
     }
 
@@ -140,7 +139,7 @@ fn handle_format(
     debug: bool,
     exit_code: Option<i32>,
     no_color: bool,
-) -> Result<String> {
+) -> error::Result<String> {
     if debug {
         let start = Instant::now();
         let output = executor::execute(format, no_version, exit_code, no_color)?;
@@ -151,7 +150,7 @@ fn handle_format(
 
         Ok(output)
     } else {
-        executor::execute(format, no_version, exit_code, no_color).map_err(|e| anyhow::anyhow!(e))
+        executor::execute(format, no_version, exit_code, no_color)
     }
 }
 
@@ -160,13 +159,12 @@ fn handle_bench(
     no_version: bool,
     exit_code: Option<i32>,
     no_color: bool,
-) -> Result<String> {
+) -> error::Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code, no_color)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let _ = executor::execute(format, no_version, exit_code, no_color)?;
         times.push(start.elapsed());
     }
 
