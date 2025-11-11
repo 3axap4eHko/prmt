@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 const COLOR_UNKNOWN: u8 = 0;
@@ -36,7 +37,19 @@ pub enum Shell {
 }
 
 impl Shell {
-    pub fn from_str(value: &str) -> Result<Self, String> {
+    fn delimiters(self) -> (&'static str, &'static str) {
+        match self {
+            Shell::Zsh => ("%{", "%}"),
+            Shell::Bash => ("\\[", "\\]"),
+            Shell::None => ("", ""),
+        }
+    }
+}
+
+impl FromStr for Shell {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "zsh" => Ok(Shell::Zsh),
             "bash" => Ok(Shell::Bash),
@@ -45,14 +58,6 @@ impl Shell {
                 "Unknown shell: {} (supported values: bash, zsh, none)",
                 other
             )),
-        }
-    }
-
-    fn delimiters(self) -> (&'static str, &'static str) {
-        match self {
-            Shell::Zsh => ("%{", "%}"),
-            Shell::Bash => ("\\[", "\\]"),
-            Shell::None => ("", ""),
         }
     }
 }

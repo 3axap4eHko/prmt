@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
 use std::env;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::time::Instant;
 
 mod detector;
