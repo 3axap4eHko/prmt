@@ -3,7 +3,7 @@ use crate::error::{PromptError, Result};
 use crate::module_trait::{ModuleContext, ModuleRef};
 use crate::parser::{Params, Token, parse};
 use crate::registry::ModuleRegistry;
-use crate::style::{AnsiStyle, ModuleStyle, global_no_color};
+use crate::style::{AnsiStyle, ModuleStyle, Shell, global_no_color};
 use rayon::prelude::*;
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -158,11 +158,22 @@ fn render_tokens_parallel<'a>(
     Ok(output)
 }
 
+#[allow(dead_code)]
 pub fn execute(
     format_str: &str,
     no_version: bool,
     exit_code: Option<i32>,
     no_color: bool,
+) -> Result<String> {
+    execute_with_shell(format_str, no_version, exit_code, no_color, Shell::None)
+}
+
+pub fn execute_with_shell(
+    format_str: &str,
+    no_version: bool,
+    exit_code: Option<i32>,
+    no_color: bool,
+    shell: Shell,
 ) -> Result<String> {
     let tokens = parse(format_str);
     let (registry, placeholder_count) = build_registry(&tokens)?;
@@ -176,6 +187,7 @@ pub fn execute(
         no_version,
         exit_code,
         detection,
+        shell,
     };
     let resolved_no_color = no_color || global_no_color();
     render_tokens(
@@ -223,7 +235,7 @@ fn render_placeholder(
         module: params.module.clone(),
         error,
     })?;
-    let styled = style.apply(&segment);
+    let styled = style.apply_with_shell(&segment, context.shell);
     Ok(Some(styled))
 }
 

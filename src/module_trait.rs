@@ -1,5 +1,6 @@
 use crate::detector::DetectionContext;
 use crate::error::Result;
+use crate::style::Shell;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ pub struct ModuleContext {
     pub no_version: bool,
     pub exit_code: Option<i32>,
     pub detection: DetectionContext,
+    pub shell: Shell,
 }
 
 impl ModuleContext {

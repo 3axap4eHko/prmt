@@ -1,5 +1,6 @@
 use std::env;
 use std::process::ExitCode;
+use std::str::FromStr;
 use std::time::Instant;
 
 mod detector;
@@ -29,6 +30,7 @@ OPTIONS:
     -b, --bench             Run benchmark (100 iterations)
         --code <CODE>       Exit code of the last command (for ok/fail modules)
         --no-color          Disable colored output
+        --shell <SHELL>     Wrap ANSI escapes for the specified shell (bash, zsh, none)
     -h, --help             Print help
     -V, --version          Print version
 ";
@@ -40,6 +42,7 @@ struct Cli {
     bench: bool,
     code: Option<i32>,
     no_color: bool,
+    shell: style::Shell,
 }
 
 fn parse_args() -> Result<Cli, lexopt::Error> {
@@ -51,6 +54,7 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
     let mut bench = false;
     let mut code = None;
     let mut no_color = false;
+    let mut shell = style::Shell::None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -81,6 +85,10 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
             Long("no-color") => {
                 no_color = true;
             }
+            Long("shell") => {
+                let value = parser.value()?.string()?;
+                shell = style::Shell::from_str(&value)?;
+            }
             Value(val) => {
                 if format.is_none() {
                     format = Some(val.string()?);
@@ -97,6 +105,7 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
         bench,
         code,
         no_color,
+        shell,
     })
 }
 
@@ -116,9 +125,16 @@ fn main() -> ExitCode {
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 
     let result = if cli.bench {
-        handle_bench(&format, cli.no_version, cli.code, cli.no_color)
+        handle_bench(&format, cli.no_version, cli.code, cli.no_color, cli.shell)
     } else {
-        handle_format(&format, cli.no_version, cli.debug, cli.code, cli.no_color)
+        handle_format(
+            &format,
+            cli.no_version,
+            cli.debug,
+            cli.code,
+            cli.no_color,
+            cli.shell,
+        )
     };
 
     match result {
@@ -139,10 +155,11 @@ fn handle_format(
     debug: bool,
     exit_code: Option<i32>,
     no_color: bool,
+    shell: style::Shell,
 ) -> error::Result<String> {
     if debug {
         let start = Instant::now();
-        let output = executor::execute(format, no_version, exit_code, no_color)?;
+        let output = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
         let elapsed = start.elapsed();
 
         eprintln!("Format: {}", format);
@@ -150,7 +167,7 @@ fn handle_format(
 
         Ok(output)
     } else {
-        executor::execute(format, no_version, exit_code, no_color)
+        executor::execute_with_shell(format, no_version, exit_code, no_color, shell)
     }
 }
 
@@ -159,12 +176,13 @@ fn handle_bench(
     no_version: bool,
     exit_code: Option<i32>,
     no_color: bool,
+    shell: style::Shell,
 ) -> error::Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute(format, no_version, exit_code, no_color)?;
+        let _ = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
         times.push(start.elapsed());
     }
 
