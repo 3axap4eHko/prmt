@@ -2,13 +2,18 @@ use crate::error::{PromptError, Result};
 use crate::memo::{GIT_MEMO, GitInfo};
 use crate::module_trait::{Module, ModuleContext};
 use bitflags::bitflags;
+#[cfg(feature = "git-gix")]
 use gix::bstr::BString;
+#[cfg(feature = "git-gix")]
 use gix::progress::Discard;
+#[cfg(feature = "git-gix")]
 use gix::status::Item as StatusItem;
+#[cfg(feature = "git-gix")]
 use gix::status::index_worktree::iter::Summary as WorktreeSummary;
 use rayon::join;
 use std::path::Path;
 use std::process::Command;
+#[cfg(feature = "git-gix")]
 use std::sync::Arc;
 
 bitflags! {
@@ -68,6 +73,7 @@ fn get_git_status_slow(repo_root: &Path) -> GitStatus {
     status
 }
 
+#[cfg(feature = "git-gix")]
 fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
     let mut status = GitStatus::empty();
 
@@ -107,6 +113,7 @@ fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
     Some(status)
 }
 
+#[cfg(feature = "git-gix")]
 fn current_branch_from_repo(repo: &gix::Repository) -> String {
     if let Ok(Some(head_ref)) = repo.head_ref() {
         String::from_utf8(head_ref.name().shorten().to_vec()).unwrap_or_else(|_| "HEAD".to_string())
@@ -138,6 +145,40 @@ fn branch_and_status_cli(repo_root: &Path, need_status: bool) -> (String, GitSta
             GitStatus::empty(),
         )
     }
+}
+
+#[cfg(feature = "git-gix")]
+fn branch_and_status(repo_root: &Path, need_status: bool) -> (String, GitStatus) {
+    match gix::ThreadSafeRepository::open(repo_root) {
+        Ok(repo) => {
+            let repo = Arc::new(repo);
+            if need_status {
+                let repo_for_branch = Arc::clone(&repo);
+                let repo_for_status = Arc::clone(&repo);
+                let repo_root_for_status = repo_root;
+                join(
+                    || {
+                        let local = repo_for_branch.to_thread_local();
+                        current_branch_from_repo(&local)
+                    },
+                    || {
+                        let local = repo_for_status.to_thread_local();
+                        collect_git_status_fast(&local)
+                            .unwrap_or_else(|| get_git_status_slow(repo_root_for_status))
+                    },
+                )
+            } else {
+                let local = repo.to_thread_local();
+                (current_branch_from_repo(&local), GitStatus::empty())
+            }
+        }
+        Err(_) => branch_and_status_cli(repo_root, need_status),
+    }
+}
+
+#[cfg(not(feature = "git-gix"))]
+fn branch_and_status(repo_root: &Path, need_status: bool) -> (String, GitStatus) {
+    branch_and_status_cli(repo_root, need_status)
 }
 
 fn run_git(args: &[&str], repo_root: &Path) -> Option<String> {
@@ -206,31 +247,7 @@ impl Module for GitModule {
         }
 
         let need_status = normalized_format == "full";
-        let (branch_name, status) = match gix::ThreadSafeRepository::open(repo_root) {
-            Ok(repo) => {
-                let repo = Arc::new(repo);
-                if need_status {
-                    let repo_for_branch = Arc::clone(&repo);
-                    let repo_for_status = Arc::clone(&repo);
-                    let repo_root_for_status = repo_root;
-                    join(
-                        || {
-                            let local = repo_for_branch.to_thread_local();
-                            current_branch_from_repo(&local)
-                        },
-                        || {
-                            let local = repo_for_status.to_thread_local();
-                            collect_git_status_fast(&local)
-                                .unwrap_or_else(|| get_git_status_slow(repo_root_for_status))
-                        },
-                    )
-                } else {
-                    let local = repo.to_thread_local();
-                    (current_branch_from_repo(&local), GitStatus::empty())
-                }
-            }
-            Err(_) => branch_and_status_cli(repo_root, need_status),
-        };
+        let (branch_name, status) = branch_and_status(repo_root, need_status);
 
         // Memoize the result for other placeholders during this render
         let info = GitInfo {

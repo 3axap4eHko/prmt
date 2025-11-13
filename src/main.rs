@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use std::env;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -46,7 +45,7 @@ struct Cli {
     shell: style::Shell,
 }
 
-fn parse_args() -> Result<Cli> {
+fn parse_args() -> Result<Cli, lexopt::Error> {
     use lexopt::prelude::*;
 
     let mut format = None;
@@ -88,14 +87,14 @@ fn parse_args() -> Result<Cli> {
             }
             Long("shell") => {
                 let value = parser.value()?.string()?;
-                shell = style::Shell::from_str(&value).map_err(|e| anyhow!(e))?;
+                shell = style::Shell::from_str(&value)?;
             }
             Value(val) => {
                 if format.is_none() {
                     format = Some(val.string()?);
                 }
             }
-            _ => return Err(arg.unexpected().into()),
+            _ => return Err(arg.unexpected()),
         }
     }
 
@@ -157,7 +156,7 @@ fn handle_format(
     exit_code: Option<i32>,
     no_color: bool,
     shell: style::Shell,
-) -> Result<String> {
+) -> error::Result<String> {
     if debug {
         let start = Instant::now();
         let output = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
@@ -169,7 +168,6 @@ fn handle_format(
         Ok(output)
     } else {
         executor::execute_with_shell(format, no_version, exit_code, no_color, shell)
-            .map_err(|e| anyhow::anyhow!(e))
     }
 }
 
@@ -179,13 +177,12 @@ fn handle_bench(
     exit_code: Option<i32>,
     no_color: bool,
     shell: style::Shell,
-) -> Result<String> {
+) -> error::Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)
-            .map_err(|e| anyhow::anyhow!(e))?;
+        let _ = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
         times.push(start.elapsed());
     }
 
