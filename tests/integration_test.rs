@@ -117,6 +117,9 @@ fn test_path_formats() {
     let result_absolute_a = execute("{path::a}", true, None, false).expect("Failed to execute");
     let result_short = execute("{path::short}", true, None, false).expect("Failed to execute");
     let result_short_s = execute("{path::s}", true, None, false).expect("Failed to execute");
+    let result_strip = execute("{path::strip}", true, None, false).expect("Failed to execute");
+    let result_stripped =
+        execute("{path::stripped}", true, None, false).expect("Failed to execute");
     let result_default = execute("{path}", true, None, false).expect("Failed to execute");
 
     // Short should be basename only
@@ -130,6 +133,10 @@ fn test_path_formats() {
     assert!(result_relative.contains(basename) || result_relative.contains("~"));
     assert_eq!(result_relative, result_relative_r); // Short and long forms should match
     assert_eq!(result_relative, result_default); // Default should be relative
+
+    // Strip formats should be at most as long as relative output
+    assert!(result_strip.len() <= result_relative.len());
+    assert_eq!(result_strip, result_stripped);
 
     // Absolute formats should never contain ~ and should always contain the basename
     assert!(!result_absolute.contains("~"));
