@@ -1,3 +1,4 @@
+use is_terminal::IsTerminal;
 use std::env;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -42,7 +43,7 @@ struct Cli {
     bench: bool,
     code: Option<i32>,
     no_color: bool,
-    shell: style::Shell,
+    shell: Option<style::Shell>,
 }
 
 fn parse_args() -> Result<Cli, lexopt::Error> {
@@ -54,7 +55,7 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
     let mut bench = false;
     let mut code = None;
     let mut no_color = false;
-    let mut shell = style::Shell::None;
+    let mut shell = None;
 
     let mut parser = lexopt::Parser::from_env();
     while let Some(arg) = parser.next()? {
@@ -87,7 +88,7 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
             }
             Long("shell") => {
                 let value = parser.value()?.string()?;
-                shell = style::Shell::from_str(&value)?;
+                shell = Some(style::Shell::from_str(&value)?);
             }
             Value(val) => {
                 if format.is_none() {
@@ -109,6 +110,35 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
     })
 }
 
+fn detect_shell_from_env() -> style::Shell {
+    if env::var("ZSH_VERSION").is_ok() {
+        return style::Shell::Zsh;
+    }
+
+    if let Ok(shell_path) = env::var("SHELL") {
+        if shell_path.ends_with("zsh") {
+            return style::Shell::Zsh;
+        }
+        if shell_path.ends_with("bash") {
+            return style::Shell::Bash;
+        }
+    }
+
+    style::Shell::None
+}
+
+fn resolve_shell(cli_shell: Option<style::Shell>) -> style::Shell {
+    if let Some(shell) = cli_shell {
+        return shell;
+    }
+
+    if std::io::stdout().is_terminal() {
+        detect_shell_from_env()
+    } else {
+        style::Shell::None
+    }
+}
+
 fn main() -> ExitCode {
     let cli = match parse_args() {
         Ok(cli) => cli,
@@ -124,8 +154,10 @@ fn main() -> ExitCode {
         .or_else(|| env::var("PRMT_FORMAT").ok())
         .unwrap_or_else(|| "{path:cyan} {node:green} {git:purple}".to_string());
 
+    let shell = resolve_shell(cli.shell);
+
     let result = if cli.bench {
-        handle_bench(&format, cli.no_version, cli.code, cli.no_color, cli.shell)
+        handle_bench(&format, cli.no_version, cli.code, cli.no_color, shell)
     } else {
         handle_format(
             &format,
@@ -133,7 +165,7 @@ fn main() -> ExitCode {
             cli.debug,
             cli.code,
             cli.no_color,
-            cli.shell,
+            shell,
         )
     };
 

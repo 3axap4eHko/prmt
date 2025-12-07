@@ -49,15 +49,15 @@ PS1='$(prmt --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
 PS1='$(prmt --code $? "{path:#89dceb} {git:#f9e2af} {ok:#a6e3a1}{fail:#f38ba8} ")'
 ```
 
-**Zsh** – Add to `~/.zshrc`:
+**Zsh** – Add to `~/.zshrc` (auto-detected by default; `--shell zsh` forces wrapping):
 ```bash
 setopt PROMPT_SUBST
 
 # Simple with named colors
-PROMPT='$(prmt --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
+PROMPT='$(prmt --shell zsh --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
 
 # Or with hex colors for precise theming
-PROMPT='$(prmt --code $? "{path:#89dceb} {git:#f9e2af} {ok:#a6e3a1}{fail:#f38ba8} ")'
+PROMPT='$(prmt --shell zsh --code $? "{path:#89dceb} {git:#f9e2af} {ok:#a6e3a1}{fail:#f38ba8} ")'
 ```
 
 **Fish** – Add to `~/.config/fish/config.fish`:
