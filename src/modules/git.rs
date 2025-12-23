@@ -206,6 +206,26 @@ fn validate_git_format(format: &str) -> Result<&str> {
     }
 }
 
+fn is_repo_owned_by_user(repo_path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let Ok(metadata) = std::fs::metadata(repo_path) else {
+            return false;
+        };
+
+        let current_uid = unsafe { libc::getuid() };
+        metadata.uid() == current_uid
+    }
+
+    #[cfg(not(unix))]
+    {
+        // On non-Unix systems (Windows), accept all repos
+        let _ = repo_path;
+        true
+    }
+}
+
 impl Module for GitModule {
     fn fs_markers(&self) -> &'static [&'static str] {
         &[".git"]
@@ -224,6 +244,11 @@ impl Module for GitModule {
             Some(p) => p,
             None => return Ok(None),
         };
+
+        // Only show git info for repos owned by the current user
+        if !is_repo_owned_by_user(repo_root) {
+            return Ok(None);
+        }
 
         // Check memoized info first
         if let Some(memoized) = GIT_MEMO.get(repo_root) {
