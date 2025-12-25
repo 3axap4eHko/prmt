@@ -45,6 +45,9 @@ cargo install prmt
 # Simple with named colors
 PS1='$(prmt --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
 
+# Explicit shell wrapping (recommended for prompt usage)
+PS1='$(prmt --shell bash --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
+
 # Or with hex colors for precise theming
 PS1='$(prmt --code $? "{path:#89dceb} {git:#f9e2af} {ok:#a6e3a1}{fail:#f38ba8} ")'
 ```
@@ -135,6 +138,12 @@ prmt '{path:cyan:s} {ok:green}{fail:red} '
 ```bash
 prmt '{path:cyan} {git:purple} {rust:red:s: 🦀} {node:green:s: ⬢} {ok:green}{fail:red} '
 # Output: ~/projects/prmt on main 🦀1.90 ⬢20.5 ❯
+```
+
+**Identity (via env module)**
+```bash
+prmt '{env::USER}@{env::HOSTNAME} {path:cyan:s} {git:purple} {ok:green}{fail:red} '
+# Output: zenpie@workbox projects on main ❯
 ```
 
 **Compact with time**
@@ -298,6 +307,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 **Git module**:
 - `full` or `f` - Branch with status (default)
 - `short` or `s` - Branch name only
+- Add `+owned` (or `+o`) to show only repos owned by the current user (e.g., `{git::full+owned}`)
 
 **Ok/Fail modules**:
 - `full` - Default symbol (❯)
@@ -313,6 +323,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 **Env module**:
 - The `type` field is required and must be the environment variable name (e.g., `{env::USER}` or `{env:blue:PATH}`).
 - The module emits the variable value only when it exists and is non-empty; otherwise it returns nothing so the placeholder is effectively inactive.
+- Example for identity: `{env::USER}@{env::HOSTNAME}`
 
 ### Type Validation
 
@@ -356,6 +367,9 @@ prmt '{git::major}'
 **Modifiers**: `bold`, `dim`, `italic`, `underline`, `reverse`, `strikethrough`
 
 Combine with dots: `cyan.bold`, `red.dim.italic`
+
+**Background colors**: use `fg+bg` or `+bg` (background only), then modifiers.
+Examples: `#ffffff+#333333`, `+blue`, `cyan+#222.dim`
 
 ### Escaping
 

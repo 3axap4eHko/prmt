@@ -103,11 +103,30 @@ impl Color {
             }
         }
     }
+
+    fn push_ansi_bg_code(&self, buf: &mut String) {
+        match self {
+            Color::Black => buf.push_str("\x1b[40m"),
+            Color::Red => buf.push_str("\x1b[41m"),
+            Color::Green => buf.push_str("\x1b[42m"),
+            Color::Yellow => buf.push_str("\x1b[43m"),
+            Color::Blue => buf.push_str("\x1b[44m"),
+            Color::Purple => buf.push_str("\x1b[45m"),
+            Color::Cyan => buf.push_str("\x1b[46m"),
+            Color::White => buf.push_str("\x1b[47m"),
+            Color::Hex(hex) => {
+                if let Ok((r, g, b)) = parse_hex_color(hex) {
+                    let _ = write!(buf, "\x1b[48;2;{};{};{}m", r, g, b);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AnsiStyle {
     pub color: Option<Color>,
+    pub background: Option<Color>,
     pub bold: bool,
     pub italic: bool,
     pub underline: bool,
@@ -132,18 +151,22 @@ impl ModuleStyle for AnsiStyle {
                 "dim" => style.dim = true,
                 "reverse" => style.reverse = true,
                 "strikethrough" => style.strikethrough = true,
-                "black" => style.color = Some(Color::Black),
-                "red" => style.color = Some(Color::Red),
-                "green" => style.color = Some(Color::Green),
-                "yellow" => style.color = Some(Color::Yellow),
-                "blue" => style.color = Some(Color::Blue),
-                "purple" | "magenta" => style.color = Some(Color::Purple),
-                "cyan" => style.color = Some(Color::Cyan),
-                "white" => style.color = Some(Color::White),
-                hex if hex.starts_with('#') => {
-                    style.color = Some(Color::Hex(hex.to_string()));
+                _ => {
+                    if part.contains('+') {
+                        let mut split = part.splitn(2, '+');
+                        let fg = split.next().unwrap_or("");
+                        let bg = split.next().unwrap_or("");
+                        if !fg.is_empty() {
+                            style.color = Some(parse_color(fg)?);
+                        }
+                        if bg.is_empty() {
+                            return Err(format!("Unknown style component: {}", part));
+                        }
+                        style.background = Some(parse_color(bg)?);
+                    } else {
+                        style.color = Some(parse_color(part)?);
+                    }
                 }
-                _ => return Err(format!("Unknown style component: {}", part)),
             }
         }
 
@@ -187,6 +210,7 @@ fn parse_hex_color(hex: &str) -> Result<(u8, u8, u8), String> {
 impl AnsiStyle {
     fn has_style(&self) -> bool {
         self.color.is_some()
+            || self.background.is_some()
             || self.bold
             || self.italic
             || self.underline
@@ -198,6 +222,9 @@ impl AnsiStyle {
     fn write_raw_codes(&self, buf: &mut String) {
         if let Some(ref color) = self.color {
             color.push_ansi_code(buf);
+        }
+        if let Some(ref background) = self.background {
+            background.push_ansi_bg_code(buf);
         }
         if self.bold {
             buf.push_str("\x1b[1m");
@@ -250,6 +277,21 @@ impl AnsiStyle {
     }
 }
 
+fn parse_color(value: &str) -> Result<Color, String> {
+    match value {
+        "black" => Ok(Color::Black),
+        "red" => Ok(Color::Red),
+        "green" => Ok(Color::Green),
+        "yellow" => Ok(Color::Yellow),
+        "blue" => Ok(Color::Blue),
+        "purple" | "magenta" => Ok(Color::Purple),
+        "cyan" => Ok(Color::Cyan),
+        "white" => Ok(Color::White),
+        hex if hex.starts_with('#') => Ok(Color::Hex(hex.to_string())),
+        _ => Err(format!("Unknown style component: {}", value)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -290,6 +332,20 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_fg_bg_colors() {
+        let style = AnsiStyle::parse("red+#00ff00").unwrap();
+        assert_eq!(style.color, Some(Color::Red));
+        assert_eq!(style.background, Some(Color::Hex("#00ff00".to_string())));
+    }
+
+    #[test]
+    fn test_parse_bg_only() {
+        let style = AnsiStyle::parse("+#112233").unwrap();
+        assert_eq!(style.color, None);
+        assert_eq!(style.background, Some(Color::Hex("#112233".to_string())));
+    }
+
+    #[test]
     fn test_apply_style() {
         let style = AnsiStyle::parse("red.bold").unwrap();
         let result = style.apply("test");
@@ -303,6 +359,15 @@ mod tests {
         let style = AnsiStyle::parse("").unwrap();
         let result = style.apply("test");
         assert_eq!(result, "test");
+    }
+
+    #[test]
+    fn test_apply_with_background() {
+        let style = AnsiStyle::parse("red+#00ff00").unwrap();
+        let result = style.apply("test");
+        assert!(result.contains("\x1b[31m"));
+        assert!(result.contains("\x1b[48;2;0;255;0m"));
+        assert!(result.ends_with("test\x1b[0m"));
     }
 
     #[test]

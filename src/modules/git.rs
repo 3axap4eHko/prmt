@@ -25,6 +25,18 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum GitMode {
+    Full,
+    Short,
+}
+
+#[derive(Debug)]
+struct GitFormat {
+    mode: GitMode,
+    owned_only: bool,
+}
+
 pub struct GitModule;
 
 impl Default for GitModule {
@@ -194,15 +206,50 @@ fn run_git(args: &[&str], repo_root: &Path) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }
 
-fn validate_git_format(format: &str) -> Result<&str> {
-    match format {
-        "" | "full" | "f" => Ok("full"),
-        "short" | "s" => Ok("short"),
-        _ => Err(PromptError::InvalidFormat {
-            module: "git".to_string(),
-            format: format.to_string(),
-            valid_formats: "full, f, short, s".to_string(),
-        }),
+fn parse_git_format(format: &str) -> Result<GitFormat> {
+    let mut mode = None;
+    let mut owned_only = false;
+
+    for part in format.split('+') {
+        if part.is_empty() {
+            continue;
+        }
+
+        match part {
+            "full" | "f" => mode = Some(GitMode::Full),
+            "short" | "s" => mode = Some(GitMode::Short),
+            "owned" | "o" | "owned-only" | "owned_only" => owned_only = true,
+            _ => {
+                return Err(PromptError::InvalidFormat {
+                    module: "git".to_string(),
+                    format: format.to_string(),
+                    valid_formats: "full, f, short, s, +o, +owned".to_string(),
+                });
+            }
+        }
+    }
+
+    Ok(GitFormat {
+        mode: mode.unwrap_or(GitMode::Full),
+        owned_only,
+    })
+}
+
+fn is_repo_owned_by_user(repo_root: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let Ok(metadata) = std::fs::metadata(repo_root) else {
+            return false;
+        };
+        let current_uid = unsafe { libc::geteuid() };
+        metadata.uid() == current_uid
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = repo_root;
+        true
     }
 }
 
@@ -212,8 +259,7 @@ impl Module for GitModule {
     }
 
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
-        // Validate format first
-        let normalized_format = validate_git_format(format)?;
+        let format = parse_git_format(format)?;
 
         // Fast path: find git directory
         let git_dir = match context.marker_path(".git") {
@@ -225,10 +271,14 @@ impl Module for GitModule {
             None => return Ok(None),
         };
 
+        if format.owned_only && !is_repo_owned_by_user(repo_root) {
+            return Ok(None);
+        }
+
         // Check memoized info first
         if let Some(memoized) = GIT_MEMO.get(repo_root) {
-            return Ok(match normalized_format {
-                "full" => {
+            return Ok(match format.mode {
+                GitMode::Full => {
                     let mut result = memoized.branch.clone();
                     if memoized.has_changes {
                         result.push('*');
@@ -241,12 +291,11 @@ impl Module for GitModule {
                     }
                     Some(result)
                 }
-                "short" => Some(memoized.branch),
-                _ => unreachable!("validate_git_format should have caught this"),
+                GitMode::Short => Some(memoized.branch),
             });
         }
 
-        let need_status = normalized_format == "full";
+        let need_status = matches!(format.mode, GitMode::Full);
         let (branch_name, status) = branch_and_status(repo_root, need_status);
 
         // Memoize the result for other placeholders during this render
@@ -259,8 +308,8 @@ impl Module for GitModule {
         GIT_MEMO.insert(repo_root.to_path_buf(), info);
 
         // Build result
-        Ok(match normalized_format {
-            "full" => {
+        Ok(match format.mode {
+            GitMode::Full => {
                 let mut result = branch_name;
                 if status.contains(GitStatus::MODIFIED) {
                     result.push('*');
@@ -273,8 +322,42 @@ impl Module for GitModule {
                 }
                 Some(result)
             }
-            "short" => Some(branch_name),
-            _ => unreachable!("validate_git_format should have caught this"),
+            GitMode::Short => Some(branch_name),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_git_format_defaults_to_full() {
+        let format = parse_git_format("").expect("format");
+        assert!(matches!(format.mode, GitMode::Full));
+        assert!(!format.owned_only);
+    }
+
+    #[test]
+    fn parse_git_format_full_owned() {
+        let format = parse_git_format("full+owned").expect("format");
+        assert!(matches!(format.mode, GitMode::Full));
+        assert!(format.owned_only);
+    }
+
+    #[test]
+    fn parse_git_format_short_o() {
+        let format = parse_git_format("s+o").expect("format");
+        assert!(matches!(format.mode, GitMode::Short));
+        assert!(format.owned_only);
+    }
+
+    #[test]
+    fn parse_git_format_rejects_unknown() {
+        let err = parse_git_format("full+wat").unwrap_err();
+        match err {
+            PromptError::InvalidFormat { module, .. } => assert_eq!(module, "git"),
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 }
