@@ -1,4 +1,3 @@
-use is_terminal::IsTerminal;
 use std::env;
 use std::process::ExitCode;
 use std::str::FromStr;
@@ -115,6 +114,10 @@ fn detect_shell_from_env() -> style::Shell {
         return style::Shell::Zsh;
     }
 
+    if env::var("BASH_VERSION").is_ok() {
+        return style::Shell::Bash;
+    }
+
     if let Ok(shell_path) = env::var("SHELL") {
         if shell_path.ends_with("zsh") {
             return style::Shell::Zsh;
@@ -132,11 +135,7 @@ fn resolve_shell(cli_shell: Option<style::Shell>) -> style::Shell {
         return shell;
     }
 
-    if std::io::stdout().is_terminal() {
-        detect_shell_from_env()
-    } else {
-        style::Shell::None
-    }
+    detect_shell_from_env()
 }
 
 fn main() -> ExitCode {
