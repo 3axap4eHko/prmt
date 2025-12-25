@@ -29,7 +29,7 @@ impl Module for GoModule {
         }
 
         if context.no_version {
-            return Ok(Some("go".to_string()));
+            return Ok(Some(String::new()));
         }
 
         // Validate and normalize format

@@ -210,7 +210,7 @@ fn render_placeholder(
         return Ok(None);
     };
 
-    if text.is_empty() {
+    if text.is_empty() && params.prefix.is_empty() && params.suffix.is_empty() {
         return Ok(None);
     }
 

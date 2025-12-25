@@ -32,7 +32,7 @@ impl Module for PythonModule {
         }
 
         if context.no_version {
-            return Ok(Some("python".to_string()));
+            return Ok(Some(String::new()));
         }
 
         // Validate and normalize format

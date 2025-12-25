@@ -32,7 +32,7 @@ impl Module for BunModule {
         }
 
         if context.no_version {
-            return Ok(Some("bun".to_string()));
+            return Ok(Some(String::new()));
         }
 
         // Validate and normalize format

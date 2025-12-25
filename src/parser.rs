@@ -74,16 +74,15 @@ impl<'a> Parser<'a> {
             let abs_pos = self.pos + offset;
             match self.bytes[abs_pos] {
                 b'\\' => {
+                    if abs_pos > start {
+                        self.skip_to(abs_pos);
+                        return Some(Token::Text(Cow::Borrowed(unsafe {
+                            self.current_slice(start)
+                        })));
+                    }
                     if abs_pos + 1 < self.bytes.len() {
                         match self.bytes[abs_pos + 1] {
                             b'{' | b'}' | b'\\' | b'n' | b't' | b':' => {
-                                if abs_pos > start {
-                                    self.skip_to(abs_pos);
-                                    return Some(Token::Text(Cow::Borrowed(unsafe {
-                                        self.current_slice(start)
-                                    })));
-                                }
-
                                 let escaped = match self.bytes[abs_pos + 1] {
                                     b'n' => "\n",
                                     b't' => "\t",
@@ -97,8 +96,8 @@ impl<'a> Parser<'a> {
                                 return Some(Token::Text(Cow::Borrowed(escaped)));
                             }
                             _ => {
-                                self.skip_to(abs_pos + 2);
-                                return self.next_token();
+                                self.skip_to(abs_pos + 1);
+                                return Some(Token::Text(Cow::Borrowed("\\")));
                             }
                         }
                     } else {
@@ -313,6 +312,19 @@ mod tests {
                 Token::Text(Cow::Borrowed("Tabbed")),
             ]
         );
+    }
+
+    #[test]
+    fn test_unknown_escape_preserves_backslash() {
+        let tokens = parse("a\\qz");
+        let combined: String = tokens
+            .iter()
+            .map(|t| match t {
+                Token::Text(s) => s.as_ref(),
+                _ => panic!("Expected text token"),
+            })
+            .collect();
+        assert_eq!(combined, "a\\qz");
     }
 
     #[test]
