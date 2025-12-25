@@ -1,6 +1,6 @@
 [package]
 name = "prmt"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2024"
 authors = ["Ivan Zakharchanka <3axap4eHko@gmail.com>"]
 description = "Ultra-fast, customizable shell prompt generator with zero-copy parsing"
