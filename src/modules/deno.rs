@@ -32,7 +32,7 @@ impl Module for DenoModule {
         }
 
         if context.no_version {
-            return Ok(Some("deno".to_string()));
+            return Ok(Some(String::new()));
         }
 
         // Validate and normalize format

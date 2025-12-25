@@ -41,7 +41,7 @@ impl Module for NodeModule {
         }
 
         if context.no_version {
-            return Ok(Some("node".to_string()));
+            return Ok(Some(String::new()));
         }
 
         // Validate and normalize format

@@ -36,7 +36,7 @@ impl Module for RustModule {
         }
 
         if context.no_version {
-            return Ok(Some("rust".to_string()));
+            return Ok(Some(String::new()));
         }
 
         let normalized_format = utils::validate_version_format(format, "rust")?;
