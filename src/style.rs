@@ -40,7 +40,7 @@ impl Shell {
     fn delimiters(self) -> (&'static str, &'static str) {
         match self {
             Shell::Zsh => ("%{", "%}"),
-            Shell::Bash => ("\\[", "\\]"),
+            Shell::Bash => ("\x01", "\x02"),
             Shell::None => ("", ""),
         }
     }
@@ -374,8 +374,8 @@ mod tests {
     fn test_apply_with_shell_wraps_bash_sequences() {
         let style = AnsiStyle::parse("red.bold").unwrap();
         let result = style.apply_with_shell("ok", Shell::Bash);
-        assert!(result.starts_with("\\[\x1b[31m\x1b[1m\\]"));
-        assert!(result.ends_with("ok\\[\x1b[0m\\]"));
+        assert!(result.starts_with("\x01\x1b[31m\x1b[1m\x02"));
+        assert!(result.ends_with("ok\x01\x1b[0m\x02"));
     }
 
     #[test]
