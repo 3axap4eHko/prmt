@@ -1,4 +1,6 @@
 use std::env;
+#[cfg(target_os = "linux")]
+use std::fs;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::time::Instant;
@@ -109,25 +111,56 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
     })
 }
 
-fn detect_shell_from_env() -> style::Shell {
+fn shell_from_name(value: &str) -> Option<style::Shell> {
+    let trimmed = value.trim().trim_end_matches('\0').trim_start_matches('-');
+    let name = trimmed.rsplit('/').next().unwrap_or(trimmed);
+    match name {
+        "zsh" => Some(style::Shell::Zsh),
+        "bash" => Some(style::Shell::Bash),
+        _ => None,
+    }
+}
+
+fn detect_shell_from_env() -> Option<style::Shell> {
     if env::var("ZSH_VERSION").is_ok() {
-        return style::Shell::Zsh;
+        return Some(style::Shell::Zsh);
     }
 
     if env::var("BASH_VERSION").is_ok() {
-        return style::Shell::Bash;
+        return Some(style::Shell::Bash);
     }
 
-    if let Ok(shell_path) = env::var("SHELL") {
-        if shell_path.ends_with("zsh") {
-            return style::Shell::Zsh;
-        }
-        if shell_path.ends_with("bash") {
-            return style::Shell::Bash;
-        }
+    if let Ok(shell_path) = env::var("SHELL")
+        && let Some(shell) = shell_from_name(&shell_path)
+    {
+        return Some(shell);
     }
 
-    style::Shell::None
+    None
+}
+
+#[cfg(target_os = "linux")]
+fn detect_shell_from_parent_process() -> Option<style::Shell> {
+    let status = fs::read_to_string("/proc/self/status").ok()?;
+    let ppid_line = status.lines().find(|line| line.starts_with("PPid:"))?;
+    let ppid = ppid_line.split_whitespace().nth(1)?.parse::<u32>().ok()?;
+    if ppid == 0 {
+        return None;
+    }
+
+    let comm = fs::read_to_string(format!("/proc/{}/comm", ppid)).ok()?;
+    if let Some(shell) = shell_from_name(&comm) {
+        return Some(shell);
+    }
+
+    let cmdline = fs::read_to_string(format!("/proc/{}/cmdline", ppid)).ok()?;
+    let first = cmdline.split('\0').next().unwrap_or("");
+    shell_from_name(first)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn detect_shell_from_parent_process() -> Option<style::Shell> {
+    None
 }
 
 fn resolve_shell(cli_shell: Option<style::Shell>) -> style::Shell {
@@ -135,7 +168,11 @@ fn resolve_shell(cli_shell: Option<style::Shell>) -> style::Shell {
         return shell;
     }
 
-    detect_shell_from_env()
+    if let Some(shell) = detect_shell_from_env() {
+        return shell;
+    }
+
+    detect_shell_from_parent_process().unwrap_or(style::Shell::None)
 }
 
 fn main() -> ExitCode {
