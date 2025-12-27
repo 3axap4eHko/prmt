@@ -91,6 +91,31 @@ PROMPT_COMMAND=_prmt_prompt
 
 *If you already use `PROMPT_COMMAND`, append `_prmt_prompt` instead of overwriting it.*
 
+### Bash transient prompt (no ble.sh)
+```bash
+PS1='$(prmt --shell bash --code $? "{path:cyan} {git:purple} {ok:green}{fail:red} ")'
+
+function _prmt_lastcommand() {
+    history | tail -1 | cut -c 8-
+}
+
+function _prmt_deleteprompt() {
+    local prompt=${PS1@P}
+    local lines=${prompt//[^$'\n']}
+    local count=${#lines}
+    tput cuu $((count + 1))
+    tput ed
+}
+
+function _prmt_indicator() {
+    prmt --shell bash --code ${1:-0} "{ok:green}> {fail:red}> "
+}
+
+PS0='\[$(_prmt_deleteprompt)\]$(_prmt_indicator ${LAST_EXIT_CODE}) $(_prmt_lastcommand)\n\[${PS1:0:$((EXPS0=1,0))}\]'
+PROMPT_COMMAND='LAST_EXIT_CODE=$?; [ "$EXPS0" = 0 ] && _prmt_deleteprompt && echo -e "$(_prmt_indicator ${LAST_EXIT_CODE})" || EXPS0=0'
+```
+This replaces the full prompt with a compact one after the command runs. It relies on `tput` and Bash 4.4+.
+
 ### Zsh with precmd
 ```zsh
 function _prmt_precmd() {
