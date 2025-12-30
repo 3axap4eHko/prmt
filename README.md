@@ -226,6 +226,7 @@ prmt '{path} {rust} {git}'
 prmt '{path::a}'                  # /home/user/projects (absolute path)
 prmt '{path::r}'                  # ~/projects (relative with ~)
 prmt '{path::s}'                  # projects (short - last dir only)
+prmt '{path::strip}'              # ~/prjct (vowels stripped after first char)
 prmt '{rust:red:s}'               # 1.89 in red (short version)
 prmt '{rust:red:m:v:}'            # v1 in red (major version with prefix)
 prmt '{path:cyan:s:[:]}'          # [projects] in cyan
