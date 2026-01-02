@@ -2,7 +2,7 @@ use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
 use std::env;
 use std::path::Path;
-use unicode_width::UnicodeWidthStr;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub struct PathModule;
 
@@ -87,7 +87,7 @@ impl Module for PathModule {
                     let mut current_width = 0;
 
                     for ch in path.chars() {
-                        let ch_width = UnicodeWidthStr::width(ch.to_string().as_str());
+                        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
                         if current_width + ch_width > target_width {
                             break;
                         }

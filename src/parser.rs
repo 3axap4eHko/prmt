@@ -72,14 +72,15 @@ impl<'a> Parser<'a> {
 
         if let Some(offset) = memchr::memchr3(b'{', b'\\', b'}', self.remaining()) {
             let abs_pos = self.pos + offset;
+            if abs_pos > start {
+                self.skip_to(abs_pos);
+                return Some(Token::Text(Cow::Borrowed(unsafe {
+                    self.current_slice(start)
+                })));
+            }
+
             match self.bytes[abs_pos] {
                 b'\\' => {
-                    if abs_pos > start {
-                        self.skip_to(abs_pos);
-                        return Some(Token::Text(Cow::Borrowed(unsafe {
-                            self.current_slice(start)
-                        })));
-                    }
                     if abs_pos + 1 < self.bytes.len() {
                         match self.bytes[abs_pos + 1] {
                             b'{' | b'}' | b'\\' | b'n' | b't' | b':' => {
@@ -102,24 +103,11 @@ impl<'a> Parser<'a> {
                         }
                     } else {
                         self.skip_to(self.bytes.len());
-                        if start < self.bytes.len() {
-                            return Some(Token::Text(Cow::Borrowed(unsafe {
-                                self.current_slice(start)
-                            })));
-                        }
-                        return None;
+                        return Some(Token::Text(Cow::Borrowed("\\")));
                     }
                 }
                 b'{' => {
-                    if abs_pos > start {
-                        self.skip_to(abs_pos);
-                        return Some(Token::Text(Cow::Borrowed(unsafe {
-                            self.current_slice(start)
-                        })));
-                    }
-
-                    if let Some(end_offset) = memchr::memchr(b'}', &self.bytes[abs_pos + 1..]) {
-                        let end_pos = abs_pos + 1 + end_offset;
+                    if let Some(end_pos) = find_unescaped(self.bytes, abs_pos + 1, b'}') {
                         let content = &self.bytes[abs_pos + 1..end_pos];
 
                         if let Some(params) =
@@ -134,12 +122,6 @@ impl<'a> Parser<'a> {
                     return Some(Token::Text(Cow::Borrowed("{")));
                 }
                 b'}' => {
-                    if abs_pos > start {
-                        self.skip_to(abs_pos);
-                        return Some(Token::Text(Cow::Borrowed(unsafe {
-                            self.current_slice(start)
-                        })));
-                    }
                     self.skip_to(abs_pos + 1);
                     return Some(Token::Text(Cow::Borrowed("}")));
                 }
@@ -147,15 +129,24 @@ impl<'a> Parser<'a> {
             }
         } else {
             self.skip_to(self.bytes.len());
-            if start < self.bytes.len() {
-                return Some(Token::Text(Cow::Borrowed(unsafe {
-                    self.current_slice(start)
-                })));
-            }
+            return Some(Token::Text(Cow::Borrowed(unsafe {
+                self.current_slice(start)
+            })));
         }
-
-        None
     }
+}
+
+fn find_unescaped(bytes: &[u8], mut i: usize, target: u8) -> Option<usize> {
+    while i < bytes.len() {
+        let offset = memchr::memchr2(b'\\', target, &bytes[i..])?;
+        let pos = i + offset;
+        if bytes[pos] == b'\\' {
+            i = pos + 2;
+            continue;
+        }
+        return Some(pos);
+    }
+    None
 }
 
 fn parse_placeholder(content: &str) -> Option<Params> {
@@ -281,6 +272,17 @@ mod tests {
         let tokens = parse("{module:style:format:pre\\:fix:suffix}");
         if let Token::Placeholder(params) = &tokens[0] {
             assert_eq!(params.prefix, "pre:fix");
+        } else {
+            panic!("Expected placeholder");
+        }
+    }
+
+    #[test]
+    fn test_escaped_closing_brace_in_placeholder() {
+        let tokens = parse("{path:::pre\\}:suf}");
+        if let Token::Placeholder(params) = &tokens[0] {
+            assert_eq!(params.prefix, "pre}");
+            assert_eq!(params.suffix, "suf");
         } else {
             panic!("Expected placeholder");
         }

@@ -12,3 +12,12 @@ pub fn validate_version_format<'a>(format: &'a str, module_name: &str) -> Result
         }),
     }
 }
+
+pub fn shorten_version(version: &str) -> String {
+    if let Some((major, rest)) = version.split_once('.') {
+        if let Some(minor) = rest.split('.').next() {
+            return format!("{major}.{minor}");
+        }
+    }
+    version.to_string()
+}

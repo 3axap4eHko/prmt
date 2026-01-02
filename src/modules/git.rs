@@ -70,12 +70,12 @@ fn get_git_status_slow(repo_root: &Path) -> GitStatus {
             if line.starts_with("??") {
                 status |= GitStatus::UNTRACKED;
             } else if !line.is_empty() {
-                let chars: Vec<char> = line.chars().take(2).collect();
-                if chars.len() >= 2 {
-                    if chars[0] != ' ' && chars[0] != '?' {
+                let bytes = line.as_bytes();
+                if bytes.len() >= 2 {
+                    if bytes[0] != b' ' && bytes[0] != b'?' {
                         status |= GitStatus::STAGED;
                     }
-                    if chars[1] != ' ' && chars[1] != '?' {
+                    if bytes[1] != b' ' && bytes[1] != b'?' {
                         status |= GitStatus::MODIFIED;
                     }
                 }

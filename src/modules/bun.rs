@@ -46,14 +46,7 @@ impl Module for BunModule {
 
         match normalized_format {
             "full" => Ok(Some(version_str.to_string())),
-            "short" => {
-                let parts: Vec<&str> = version_str.split('.').collect();
-                if parts.len() >= 2 {
-                    Ok(Some(format!("{}.{}", parts[0], parts[1])))
-                } else {
-                    Ok(Some(version_str.to_string()))
-                }
-            }
+            "short" => Ok(Some(utils::shorten_version(version_str))),
             "major" => Ok(version_str.split('.').next().map(|s| s.to_string())),
             _ => unreachable!("validate_version_format should have caught this"),
         }
