@@ -79,7 +79,7 @@ impl<'a> Parser<'a> {
                 })));
             }
 
-            match self.bytes[abs_pos] {
+            let token = match self.bytes[abs_pos] {
                 b'\\' => {
                     if abs_pos + 1 < self.bytes.len() {
                         match self.bytes[abs_pos + 1] {
@@ -94,16 +94,16 @@ impl<'a> Parser<'a> {
                                     _ => unreachable!(),
                                 };
                                 self.skip_to(abs_pos + 2);
-                                return Some(Token::Text(Cow::Borrowed(escaped)));
+                                Some(Token::Text(Cow::Borrowed(escaped)))
                             }
                             _ => {
                                 self.skip_to(abs_pos + 1);
-                                return Some(Token::Text(Cow::Borrowed("\\")));
+                                Some(Token::Text(Cow::Borrowed("\\")))
                             }
                         }
                     } else {
                         self.skip_to(self.bytes.len());
-                        return Some(Token::Text(Cow::Borrowed("\\")));
+                        Some(Token::Text(Cow::Borrowed("\\")))
                     }
                 }
                 b'{' => {
@@ -114,25 +114,30 @@ impl<'a> Parser<'a> {
                             parse_placeholder(unsafe { std::str::from_utf8_unchecked(content) })
                         {
                             self.skip_to(end_pos + 1);
-                            return Some(Token::Placeholder(params));
+                            Some(Token::Placeholder(params))
+                        } else {
+                            self.skip_to(abs_pos + 1);
+                            Some(Token::Text(Cow::Borrowed("{")))
                         }
+                    } else {
+                        self.skip_to(abs_pos + 1);
+                        Some(Token::Text(Cow::Borrowed("{")))
                     }
-
-                    self.skip_to(abs_pos + 1);
-                    return Some(Token::Text(Cow::Borrowed("{")));
                 }
                 b'}' => {
                     self.skip_to(abs_pos + 1);
-                    return Some(Token::Text(Cow::Borrowed("}")));
+                    Some(Token::Text(Cow::Borrowed("}")))
                 }
                 _ => unreachable!(),
-            }
-        } else {
-            self.skip_to(self.bytes.len());
-            return Some(Token::Text(Cow::Borrowed(unsafe {
-                self.current_slice(start)
-            })));
+            };
+
+            return token;
         }
+
+        self.skip_to(self.bytes.len());
+        Some(Token::Text(Cow::Borrowed(unsafe {
+            self.current_slice(start)
+        })))
     }
 }
 
