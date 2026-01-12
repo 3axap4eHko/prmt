@@ -50,6 +50,34 @@ fn normalize_relative_path(current_dir: &Path) -> String {
     normalize_separators(current_dir.to_string_lossy().to_string())
 }
 
+fn strip_vowels(path: &str) -> String {
+    let mut result = String::with_capacity(path.len());
+    let mut segment_start = true;
+
+    for ch in path.chars() {
+        if ch == '/' {
+            segment_start = true;
+            result.push(ch);
+            continue;
+        }
+
+        if segment_start {
+            segment_start = false;
+            result.push(ch);
+            continue;
+        }
+
+        let lower = ch.to_ascii_lowercase();
+        if matches!(lower, 'a' | 'e' | 'i' | 'o' | 'u') {
+            continue;
+        }
+
+        result.push(ch);
+    }
+
+    result
+}
+
 impl Module for PathModule {
     fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
         let current_dir = match env::current_dir() {
@@ -60,6 +88,7 @@ impl Module for PathModule {
         match format {
             "" | "relative" | "r" => Ok(Some(normalize_relative_path(&current_dir))),
             "absolute" | "a" | "f" => Ok(Some(current_dir.to_string_lossy().to_string())),
+            "strip" | "stripped" => Ok(Some(strip_vowels(&normalize_relative_path(&current_dir)))),
             "short" | "s" => Ok(current_dir
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -102,7 +131,8 @@ impl Module for PathModule {
             _ => Err(PromptError::InvalidFormat {
                 module: "path".to_string(),
                 format: format.to_string(),
-                valid_formats: "relative, r, absolute, a, f, short, s, truncate:N".to_string(),
+                valid_formats: "relative, r, absolute, a, f, short, s, strip, stripped, truncate:N"
+                    .to_string(),
             }),
         }
     }
@@ -219,5 +249,12 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn strip_vowels_helper_removes_vowels_after_first_char() {
+        assert_eq!(strip_vowels("~/project"), "~/prjct");
+        assert_eq!(strip_vowels("/alpha/beta"), "/alph/bt");
+        assert_eq!(strip_vowels("simple"), "smpl");
     }
 }
