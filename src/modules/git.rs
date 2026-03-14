@@ -3,7 +3,7 @@ use crate::memo::{GIT_MEMO, GitInfo};
 use crate::module_trait::{Module, ModuleContext};
 use bitflags::bitflags;
 #[cfg(feature = "git-gix")]
-use gix::bstr::BString;
+use gix::bstr::{BString, ByteSlice};
 #[cfg(feature = "git-gix")]
 use gix::progress::Discard;
 #[cfg(feature = "git-gix")]
@@ -86,8 +86,26 @@ fn get_git_status_slow(repo_root: &Path) -> GitStatus {
 }
 
 #[cfg(feature = "git-gix")]
+fn dir_has_files(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
+        if !ft.is_dir() {
+            return true;
+        }
+        if dir_has_files(&entry.path()) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(feature = "git-gix")]
 fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
     let mut status = GitStatus::empty();
+    let workdir = repo.workdir()?;
 
     let platform = repo.status(Discard).ok()?;
     let iter = platform.into_iter(Vec::<BString>::new()).ok()?;
@@ -98,7 +116,12 @@ fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
             StatusItem::IndexWorktree(change) => {
                 if let Some(summary) = change.summary() {
                     match summary {
-                        WorktreeSummary::Added => status |= GitStatus::UNTRACKED,
+                        WorktreeSummary::Added => {
+                            let full = workdir.join(change.rela_path().to_str_lossy().as_ref());
+                            if !full.is_dir() || dir_has_files(&full) {
+                                status |= GitStatus::UNTRACKED;
+                            }
+                        }
                         WorktreeSummary::IntentToAdd => status |= GitStatus::STAGED,
                         WorktreeSummary::Conflict
                         | WorktreeSummary::Copied
@@ -359,5 +382,59 @@ mod tests {
             PromptError::InvalidFormat { module, .. } => assert_eq!(module, "git"),
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[cfg(feature = "git-gix")]
+    #[test]
+    fn dir_has_files_returns_false_for_empty_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("a/b/c")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("a/d")).unwrap();
+        assert!(!dir_has_files(tmp.path()));
+    }
+
+    #[cfg(feature = "git-gix")]
+    #[test]
+    fn dir_has_files_returns_true_when_file_nested() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("a/b")).unwrap();
+        std::fs::write(tmp.path().join("a/b/file.txt"), "content").unwrap();
+        assert!(dir_has_files(tmp.path()));
+    }
+
+    #[cfg(feature = "git-gix")]
+    #[test]
+    fn empty_dir_tree_not_reported_as_untracked() {
+        let tmp = tempfile::tempdir().unwrap();
+        let repo_path = tmp.path();
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        std::fs::write(repo_path.join("file.txt"), "hello").unwrap();
+        std::process::Command::new("git")
+            .args(["add", "file.txt"])
+            .current_dir(repo_path)
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit", "-m", "init"])
+            .current_dir(repo_path)
+            .env("GIT_AUTHOR_NAME", "test")
+            .env("GIT_AUTHOR_EMAIL", "test@test.com")
+            .env("GIT_COMMITTER_NAME", "test")
+            .env("GIT_COMMITTER_EMAIL", "test@test.com")
+            .output()
+            .unwrap();
+
+        std::fs::create_dir_all(repo_path.join("empty/nested/deep")).unwrap();
+
+        let (_, status) = branch_and_status(repo_path, true);
+        assert!(
+            !status.contains(GitStatus::UNTRACKED),
+            "empty directory tree should not be reported as untracked"
+        );
     }
 }
