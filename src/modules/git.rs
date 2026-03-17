@@ -5,11 +5,17 @@ use bitflags::bitflags;
 #[cfg(feature = "git-gix")]
 use gix::bstr::{BString, ByteSlice};
 #[cfg(feature = "git-gix")]
+use gix::dir::entry::Status as DirEntryStatus;
+#[cfg(feature = "git-gix")]
+use gix::dir::walk::EmissionMode as DirwalkEmissionMode;
+#[cfg(feature = "git-gix")]
 use gix::progress::Discard;
 #[cfg(feature = "git-gix")]
 use gix::status::Item as StatusItem;
 #[cfg(feature = "git-gix")]
-use gix::status::index_worktree::iter::Summary as WorktreeSummary;
+use gix::status::index_worktree::Item as IndexWorktreeItem;
+#[cfg(feature = "git-gix")]
+use gix::status::plumbing::index_as_worktree::EntryStatus as IndexEntryStatus;
 use rayon::join;
 use std::path::Path;
 use std::process::Command;
@@ -107,31 +113,38 @@ fn collect_git_status_fast(repo: &gix::Repository) -> Option<GitStatus> {
     let mut status = GitStatus::empty();
     let workdir = repo.workdir()?;
 
-    let platform = repo.status(Discard).ok()?;
+    let platform = repo
+        .status(Discard)
+        .ok()?
+        .dirwalk_options(|opts| opts.emit_ignored(Some(DirwalkEmissionMode::CollapseDirectory)));
     let iter = platform.into_iter(Vec::<BString>::new()).ok()?;
 
     for item in iter {
         let item = item.ok()?;
         match item {
-            StatusItem::IndexWorktree(change) => {
-                if let Some(summary) = change.summary() {
-                    match summary {
-                        WorktreeSummary::Added => {
-                            let full = workdir.join(change.rela_path().to_str_lossy().as_ref());
-                            if !full.is_dir() || dir_has_files(&full) {
-                                status |= GitStatus::UNTRACKED;
-                            }
+            StatusItem::IndexWorktree(change) => match change {
+                IndexWorktreeItem::DirectoryContents { entry, .. } => {
+                    if matches!(entry.status, DirEntryStatus::Untracked) {
+                        let full = workdir.join(entry.rela_path.to_str_lossy().as_ref());
+                        if !full.is_dir() || dir_has_files(&full) {
+                            status |= GitStatus::UNTRACKED;
                         }
-                        WorktreeSummary::IntentToAdd => status |= GitStatus::STAGED,
-                        WorktreeSummary::Conflict
-                        | WorktreeSummary::Copied
-                        | WorktreeSummary::Modified
-                        | WorktreeSummary::Removed
-                        | WorktreeSummary::Renamed
-                        | WorktreeSummary::TypeChange => status |= GitStatus::MODIFIED,
                     }
                 }
-            }
+                IndexWorktreeItem::Modification {
+                    status: entry_status,
+                    ..
+                } => match entry_status {
+                    IndexEntryStatus::IntentToAdd => status |= GitStatus::STAGED,
+                    IndexEntryStatus::NeedsUpdate(_) => {}
+                    IndexEntryStatus::Conflict { .. } | IndexEntryStatus::Change(_) => {
+                        status |= GitStatus::MODIFIED;
+                    }
+                },
+                IndexWorktreeItem::Rewrite { .. } => {
+                    status |= GitStatus::MODIFIED;
+                }
+            },
             StatusItem::TreeIndex(_) => {
                 status |= GitStatus::STAGED;
             }
@@ -353,6 +366,63 @@ impl Module for GitModule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use std::env;
+    use std::ffi::OsString;
+    use std::fs;
+    use tempfile::tempdir;
+
+    struct EnvVarGuard {
+        key: String,
+        original: Option<OsString>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &str, value: &str) -> Self {
+            let original = env::var_os(key);
+            unsafe {
+                env::set_var(key, value);
+            }
+            Self {
+                key: key.to_string(),
+                original,
+            }
+        }
+
+        fn unset(key: &str) -> Self {
+            let original = env::var_os(key);
+            unsafe {
+                env::remove_var(key);
+            }
+            Self {
+                key: key.to_string(),
+                original,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.original {
+                unsafe {
+                    env::set_var(&self.key, value);
+                }
+            } else {
+                unsafe {
+                    env::remove_var(&self.key);
+                }
+            }
+        }
+    }
+
+    fn git_init(repo_root: &Path) {
+        let status = Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(repo_root)
+            .status()
+            .expect("git init");
+        assert!(status.success(), "git init should succeed");
+    }
 
     #[test]
     fn parse_git_format_defaults_to_full() {
@@ -387,54 +457,136 @@ mod tests {
     #[cfg(feature = "git-gix")]
     #[test]
     fn dir_has_files_returns_false_for_empty_tree() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(tmp.path().join("a/b/c")).unwrap();
-        std::fs::create_dir_all(tmp.path().join("a/d")).unwrap();
+        let tmp = tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("a/b/c")).unwrap();
+        fs::create_dir_all(tmp.path().join("a/d")).unwrap();
         assert!(!dir_has_files(tmp.path()));
     }
 
     #[cfg(feature = "git-gix")]
     #[test]
     fn dir_has_files_returns_true_when_file_nested() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(tmp.path().join("a/b")).unwrap();
-        std::fs::write(tmp.path().join("a/b/file.txt"), "content").unwrap();
+        let tmp = tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("a/b")).unwrap();
+        fs::write(tmp.path().join("a/b/file.txt"), "content").unwrap();
         assert!(dir_has_files(tmp.path()));
     }
 
-    #[cfg(feature = "git-gix")]
     #[test]
-    fn empty_dir_tree_not_reported_as_untracked() {
-        let tmp = tempfile::tempdir().unwrap();
-        let repo_path = tmp.path();
+    fn empty_repo_has_no_untracked_status_in_slow_path() {
+        let dir = tempdir().expect("tempdir");
+        git_init(dir.path());
 
-        std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(repo_path)
-            .output()
-            .unwrap();
-        std::fs::write(repo_path.join("file.txt"), "hello").unwrap();
-        std::process::Command::new("git")
+        assert!(get_git_status_slow(dir.path()).is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "git-gix")]
+    fn empty_repo_has_no_untracked_status_in_gix_path() {
+        let dir = tempdir().expect("tempdir");
+        git_init(dir.path());
+
+        let repo = gix::ThreadSafeRepository::open(dir.path()).expect("open repo");
+        let local = repo.to_thread_local();
+
+        assert!(matches!(collect_git_status_fast(&local), Some(status) if status.is_empty()));
+    }
+
+    #[test]
+    #[cfg(feature = "git-gix")]
+    fn untracked_file_sets_untracked_status_in_gix_path() {
+        let dir = tempdir().expect("tempdir");
+        git_init(dir.path());
+        fs::write(dir.path().join("note.txt"), b"scratch").expect("write note");
+
+        let repo = gix::ThreadSafeRepository::open(dir.path()).expect("open repo");
+        let local = repo.to_thread_local();
+
+        assert!(matches!(
+            collect_git_status_fast(&local),
+            Some(status) if status.contains(GitStatus::UNTRACKED)
+        ));
+    }
+
+    #[test]
+    #[cfg(feature = "git-gix")]
+    fn empty_dir_tree_not_reported_as_untracked() {
+        let dir = tempdir().expect("tempdir");
+        git_init(dir.path());
+        fs::write(dir.path().join("file.txt"), "hello").unwrap();
+        Command::new("git")
             .args(["add", "file.txt"])
-            .current_dir(repo_path)
-            .output()
+            .current_dir(dir.path())
+            .status()
             .unwrap();
-        std::process::Command::new("git")
+        Command::new("git")
             .args(["commit", "-m", "init"])
-            .current_dir(repo_path)
+            .current_dir(dir.path())
             .env("GIT_AUTHOR_NAME", "test")
             .env("GIT_AUTHOR_EMAIL", "test@test.com")
             .env("GIT_COMMITTER_NAME", "test")
             .env("GIT_COMMITTER_EMAIL", "test@test.com")
-            .output()
+            .status()
             .unwrap();
 
-        std::fs::create_dir_all(repo_path.join("empty/nested/deep")).unwrap();
+        fs::create_dir_all(dir.path().join("empty/nested/deep")).unwrap();
 
-        let (_, status) = branch_and_status(repo_path, true);
+        let (_, status) = branch_and_status(dir.path(), true);
         assert!(
             !status.contains(GitStatus::UNTRACKED),
             "empty directory tree should not be reported as untracked"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "git-gix")]
+    #[serial]
+    fn xdg_ignored_progress_dir_stays_clean_in_gix_path() {
+        let home = tempdir().expect("home");
+        let ignore_dir = home.path().join(".config/git");
+        fs::create_dir_all(&ignore_dir).expect("create ignore dir");
+        fs::write(ignore_dir.join("ignore"), b"**/.progress/\n").expect("write ignore file");
+
+        let _home = EnvVarGuard::set("HOME", home.path().to_str().expect("utf8 path"));
+        let _xdg = EnvVarGuard::unset("XDG_CONFIG_HOME");
+        let _git_config_global = EnvVarGuard::unset("GIT_CONFIG_GLOBAL");
+
+        let dir = tempdir().expect("repo");
+        git_init(dir.path());
+        fs::create_dir_all(dir.path().join(".progress")).expect("create progress dir");
+        fs::write(dir.path().join(".progress/master.md"), b"scratch").expect("write progress file");
+
+        let repo = gix::ThreadSafeRepository::open(dir.path()).expect("open repo");
+        let local = repo.to_thread_local();
+
+        assert!(matches!(
+            collect_git_status_fast(&local),
+            Some(status) if !status.contains(GitStatus::UNTRACKED)
+        ));
+    }
+
+    #[test]
+    #[cfg(feature = "git-gix")]
+    #[serial]
+    fn xdg_ignored_progress_dir_does_not_set_untracked_status() {
+        let home = tempdir().expect("home");
+        let ignore_dir = home.path().join(".config/git");
+        fs::create_dir_all(&ignore_dir).expect("create ignore dir");
+        fs::write(ignore_dir.join("ignore"), b"**/.progress/\n").expect("write ignore file");
+
+        let _home = EnvVarGuard::set("HOME", home.path().to_str().expect("utf8 path"));
+        let _xdg = EnvVarGuard::unset("XDG_CONFIG_HOME");
+        let _git_config_global = EnvVarGuard::unset("GIT_CONFIG_GLOBAL");
+
+        let dir = tempdir().expect("repo");
+        git_init(dir.path());
+        fs::create_dir_all(dir.path().join(".progress")).expect("create progress dir");
+        fs::write(dir.path().join(".progress/master.md"), b"scratch").expect("write progress file");
+
+        assert!(get_git_status_slow(dir.path()).is_empty());
+        assert!(matches!(
+            branch_and_status(dir.path(), true),
+            (_, status) if !status.contains(GitStatus::UNTRACKED)
+        ));
     }
 }

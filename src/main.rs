@@ -48,6 +48,14 @@ struct Cli {
 }
 
 fn parse_args() -> Result<Cli, lexopt::Error> {
+    parse_args_from(std::env::args_os())
+}
+
+fn parse_args_from<I, T>(args: I) -> Result<Cli, lexopt::Error>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString>,
+{
     use lexopt::prelude::*;
 
     let mut format = None;
@@ -58,7 +66,7 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
     let mut no_color = false;
     let mut shell = None;
 
-    let mut parser = lexopt::Parser::from_env();
+    let mut parser = lexopt::Parser::from_iter(args);
     while let Some(arg) = parser.next()? {
         match arg {
             Short('h') | Long("help") => {
@@ -91,9 +99,12 @@ fn parse_args() -> Result<Cli, lexopt::Error> {
                 let value = parser.value()?.string()?;
                 shell = Some(style::Shell::from_str(&value)?);
             }
-            Value(val) => {
+            arg if matches!(&arg, Value(_)) => {
+                let Value(val) = arg else { unreachable!() };
                 if format.is_none() {
                     format = Some(val.string()?);
+                } else {
+                    return Err(Value(val).unexpected());
                 }
             }
             _ => return Err(arg.unexpected()),
@@ -164,15 +175,27 @@ fn detect_shell_from_parent_process() -> Option<style::Shell> {
 }
 
 fn resolve_shell(cli_shell: Option<style::Shell>) -> style::Shell {
+    resolve_shell_from_sources(
+        cli_shell,
+        detect_shell_from_parent_process(),
+        detect_shell_from_env(),
+    )
+}
+
+fn resolve_shell_from_sources(
+    cli_shell: Option<style::Shell>,
+    parent_shell: Option<style::Shell>,
+    env_shell: Option<style::Shell>,
+) -> style::Shell {
     if let Some(shell) = cli_shell {
         return shell;
     }
 
-    if let Some(shell) = detect_shell_from_env() {
+    if let Some(shell) = parent_shell {
         return shell;
     }
 
-    detect_shell_from_parent_process().unwrap_or(style::Shell::None)
+    env_shell.unwrap_or(style::Shell::None)
 }
 
 fn main() -> ExitCode {
@@ -267,4 +290,69 @@ fn handle_bench(
         max.as_secs_f64() * 1000.0,
         p99.as_secs_f64() * 1000.0
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_shell_prefers_cli_over_other_sources() {
+        let resolved = resolve_shell_from_sources(
+            Some(style::Shell::Bash),
+            Some(style::Shell::Zsh),
+            Some(style::Shell::None),
+        );
+
+        assert_eq!(resolved, style::Shell::Bash);
+    }
+
+    #[test]
+    fn resolve_shell_prefers_parent_process_over_env() {
+        let resolved =
+            resolve_shell_from_sources(None, Some(style::Shell::Bash), Some(style::Shell::Zsh));
+
+        assert_eq!(resolved, style::Shell::Bash);
+    }
+
+    #[test]
+    fn resolve_shell_falls_back_to_env_when_parent_missing() {
+        let resolved = resolve_shell_from_sources(None, None, Some(style::Shell::Zsh));
+
+        assert_eq!(resolved, style::Shell::Zsh);
+    }
+
+    #[test]
+    fn resolve_shell_defaults_to_none_when_no_source_matches() {
+        let resolved = resolve_shell_from_sources(None, None, None);
+
+        assert_eq!(resolved, style::Shell::None);
+    }
+
+    #[test]
+    fn parse_args_accepts_single_positional_format() {
+        let cli = parse_args_from(["prmt", "{path}"]).expect("parse args");
+
+        assert_eq!(cli.format.as_deref(), Some("{path}"));
+    }
+
+    #[test]
+    fn parse_args_rejects_multiple_positional_formats() {
+        let err = match parse_args_from(["prmt", "{path}", "{git}"]) {
+            Ok(_) => panic!("expected error"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.to_string(), "unexpected argument \"{git}\"");
+    }
+
+    #[test]
+    fn parse_args_rejects_positional_when_flag_format_is_present() {
+        let err = match parse_args_from(["prmt", "--format", "{path}", "{git}"]) {
+            Ok(_) => panic!("expected error"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.to_string(), "unexpected argument \"{git}\"");
+    }
 }

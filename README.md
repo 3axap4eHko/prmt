@@ -312,7 +312,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 | `python` | `requirements.txt`, `pyproject.toml`, etc | Python version |
 | `rust` | `Cargo.toml` | Rust version |
 | `deno` | `deno.json`, `deno.jsonc` | Deno version |
-| `bun` | `bun.lockb` | Bun version |
+| `bun` | `bun.lock`, `bun.lockb` | Bun version |
 | `go` | `go.mod` | Go version |
 | `env` | Requested variable is set/non-empty | Value of a specific environment variable (format = name) |
 | `time` | Always active | Current time in various formats |
