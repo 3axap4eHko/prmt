@@ -316,6 +316,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 | `go` | `go.mod` | Go version |
 | `env` | Requested variable is set/non-empty | Value of a specific environment variable (format = name) |
 | `time` | Always active | Current time in various formats |
+| `json` | `--stdin` flag | Extract values from JSON piped via stdin (format = dot-path) |
 
 ### Type Values
 
@@ -349,6 +350,26 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 - The `type` field is required and must be the environment variable name (e.g., `{env::USER}` or `{env:blue:PATH}`).
 - The module emits the variable value only when it exists and is non-empty; otherwise it returns nothing so the placeholder is effectively inactive.
 - Example for identity: `{env::USER}@{env::HOSTNAME}`
+
+**Json module** (requires `--stdin`):
+- Reads JSON from stdin and extracts values using dot-path notation.
+- The `type` field is the dot-path to the value (e.g., `{json::.model.id}` or `{json::name}`).
+- Supports nested objects (`{json::.a.b.c}`), array indexing (`{json::.items.0}`), and the leading dot is optional.
+- Strings are returned as-is, numbers and booleans are stringified, null and missing paths produce no output.
+- When `--stdin` is not passed, json placeholders are silently inactive.
+
+**Claude Code status line** -- pipe JSON context to prmt to display model and context window usage.
+
+Add to your Claude Code `settings.json`:
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "prmt --stdin '{path:#89dceb}{node:#a6e3a1:f: [:]}{rust:#f38ba8:f: 🦀}{git:#f9e2af:f: 󰊢 } {json:#d97757:.model.id: :}{json:#f5c2e7:.context_window.used_percentage: :%}'",
+    "padding": 0
+  }
+}
+```
 
 ### Type Validation
 
@@ -439,13 +460,15 @@ Examples: `#ffffff+#333333`, `+blue`, `cyan+#222.dim`
 prmt [OPTIONS] [FORMAT]
 
 OPTIONS:
-    -n, --no-version    Skip version detection for speed
-    -d, --debug         Show debug information and timing
-    -b, --bench         Run benchmark (100 iterations)
-        --code <CODE>   Exit code of the last command (for ok/fail modules)
-        --no-color      Disable colored output
-    -h, --help         Print help
-    -V, --version      Print version
+    -n, --no-version        Skip version detection for speed
+    -d, --debug             Show debug information and timing
+    -b, --bench             Run benchmark (100 iterations)
+        --stdin             Read JSON from stdin (enables json module)
+        --code <CODE>       Exit code of the last command (for ok/fail modules)
+        --no-color          Disable colored output
+        --shell <SHELL>     Wrap ANSI escapes for the specified shell (bash, zsh, none)
+    -h, --help              Print help
+    -V, --version           Print version
 
 ARGS:
     <FORMAT>           Format string (default from PRMT_FORMAT env var)
