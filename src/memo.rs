@@ -11,6 +11,7 @@ pub static PYTHON_VERSION: VersionSlot = OnceLock::new();
 pub static GO_VERSION: VersionSlot = OnceLock::new();
 pub static DENO_VERSION: VersionSlot = OnceLock::new();
 pub static BUN_VERSION: VersionSlot = OnceLock::new();
+pub static ELIXIR_VERSION: VersionSlot = OnceLock::new();
 
 pub fn memoized_version<F>(slot: &VersionSlot, fetch: F) -> Option<Arc<str>>
 where

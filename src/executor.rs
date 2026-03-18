@@ -304,6 +304,7 @@ fn instantiate_module(name: &str) -> Option<ModuleRef> {
         "node" => Arc::new(node::NodeModule::new()),
         "python" => Arc::new(python::PythonModule::new()),
         "go" => Arc::new(go::GoModule::new()),
+        "elixir" => Arc::new(elixir::ElixirModule::new()),
         "deno" => Arc::new(deno::DenoModule::new()),
         "bun" => Arc::new(bun::BunModule::new()),
         "time" => Arc::new(time::TimeModule),

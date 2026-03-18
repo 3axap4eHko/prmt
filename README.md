@@ -314,6 +314,7 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 | `deno` | `deno.json`, `deno.jsonc` | Deno version |
 | `bun` | `bun.lock`, `bun.lockb` | Bun version |
 | `go` | `go.mod` | Go version |
+| `elixir` | `mix.exs` | Elixir version |
 | `env` | Requested variable is set/non-empty | Value of a specific environment variable (format = name) |
 | `time` | Always active | Current time in various formats |
 | `json` | `--stdin` flag | Extract values from JSON piped via stdin (format = dot-path) |
