@@ -82,7 +82,7 @@ pub enum Color {
     Purple,
     Cyan,
     White,
-    Hex(String),
+    Rgb(u8, u8, u8),
 }
 
 impl Color {
@@ -96,10 +96,8 @@ impl Color {
             Color::Purple => buf.push_str("\x1b[35m"),
             Color::Cyan => buf.push_str("\x1b[36m"),
             Color::White => buf.push_str("\x1b[37m"),
-            Color::Hex(hex) => {
-                if let Ok((r, g, b)) = parse_hex_color(hex) {
-                    let _ = write!(buf, "\x1b[38;2;{};{};{}m", r, g, b);
-                }
+            Color::Rgb(r, g, b) => {
+                let _ = write!(buf, "\x1b[38;2;{};{};{}m", r, g, b);
             }
         }
     }
@@ -114,10 +112,8 @@ impl Color {
             Color::Purple => buf.push_str("\x1b[45m"),
             Color::Cyan => buf.push_str("\x1b[46m"),
             Color::White => buf.push_str("\x1b[47m"),
-            Color::Hex(hex) => {
-                if let Ok((r, g, b)) = parse_hex_color(hex) {
-                    let _ = write!(buf, "\x1b[48;2;{};{};{}m", r, g, b);
-                }
+            Color::Rgb(r, g, b) => {
+                let _ = write!(buf, "\x1b[48;2;{};{};{}m", r, g, b);
             }
         }
     }
@@ -287,7 +283,10 @@ fn parse_color(value: &str) -> Result<Color, String> {
         "purple" | "magenta" => Ok(Color::Purple),
         "cyan" => Ok(Color::Cyan),
         "white" => Ok(Color::White),
-        hex if hex.starts_with('#') => Ok(Color::Hex(hex.to_string())),
+        hex if hex.starts_with('#') => {
+            let (r, g, b) = parse_hex_color(hex)?;
+            Ok(Color::Rgb(r, g, b))
+        }
         _ => Err(format!("Unknown style component: {}", value)),
     }
 }
@@ -328,21 +327,21 @@ mod tests {
     #[test]
     fn test_parse_hex_color() {
         let style = AnsiStyle::parse("#00ff00").unwrap();
-        assert!(matches!(style.color, Some(Color::Hex(_))));
+        assert!(matches!(style.color, Some(Color::Rgb(0, 255, 0))));
     }
 
     #[test]
     fn test_parse_fg_bg_colors() {
         let style = AnsiStyle::parse("red+#00ff00").unwrap();
         assert_eq!(style.color, Some(Color::Red));
-        assert_eq!(style.background, Some(Color::Hex("#00ff00".to_string())));
+        assert_eq!(style.background, Some(Color::Rgb(0, 255, 0)));
     }
 
     #[test]
     fn test_parse_bg_only() {
         let style = AnsiStyle::parse("+#112233").unwrap();
         assert_eq!(style.color, None);
-        assert_eq!(style.background, Some(Color::Hex("#112233".to_string())));
+        assert_eq!(style.background, Some(Color::Rgb(0x11, 0x22, 0x33)));
     }
 
     #[test]

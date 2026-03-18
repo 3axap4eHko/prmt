@@ -1585,6 +1585,7 @@ dependencies = [
  "once_cell",
  "rayon",
  "regex",
+ "serde_json",
  "serial_test",
  "tempfile",
  "thiserror",

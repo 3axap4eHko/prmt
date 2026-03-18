@@ -40,6 +40,7 @@ fn ctx(no_version: bool, exit_code: Option<i32>, markers: &[&'static str]) -> Mo
         exit_code,
         detection: detection_for(markers),
         shell: Shell::None,
+        stdin_data: None,
     }
 }
 

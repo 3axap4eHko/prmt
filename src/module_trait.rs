@@ -10,6 +10,7 @@ pub struct ModuleContext {
     pub exit_code: Option<i32>,
     pub detection: DetectionContext,
     pub shell: Shell,
+    pub stdin_data: Option<Arc<serde_json::Value>>,
 }
 
 impl ModuleContext {

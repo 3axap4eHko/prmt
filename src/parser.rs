@@ -1,18 +1,18 @@
 use std::borrow::Cow;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Params {
-    pub module: String,
-    pub style: String,
-    pub format: String,
-    pub prefix: String,
-    pub suffix: String,
+pub struct Params<'a> {
+    pub module: Cow<'a, str>,
+    pub style: Cow<'a, str>,
+    pub format: Cow<'a, str>,
+    pub prefix: Cow<'a, str>,
+    pub suffix: Cow<'a, str>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token<'a> {
     Text(Cow<'a, str>),
-    Placeholder(Params),
+    Placeholder(Params<'a>),
 }
 
 pub struct Parser<'a> {
@@ -154,7 +154,7 @@ fn find_unescaped(bytes: &[u8], mut i: usize, target: u8) -> Option<usize> {
     None
 }
 
-fn parse_placeholder(content: &str) -> Option<Params> {
+fn parse_placeholder<'a>(content: &'a str) -> Option<Params<'a>> {
     let fields = split_fields(content);
 
     if fields[0].is_empty() {
@@ -162,11 +162,11 @@ fn parse_placeholder(content: &str) -> Option<Params> {
     }
 
     Some(Params {
-        module: unescape_if_needed(fields[0]).into_owned(),
-        style: unescape_if_needed(fields[1]).into_owned(),
-        format: unescape_if_needed(fields[2]).into_owned(),
-        prefix: unescape_if_needed(fields[3]).into_owned(),
-        suffix: unescape_if_needed(fields[4]).into_owned(),
+        module: unescape_if_needed(fields[0]),
+        style: unescape_if_needed(fields[1]),
+        format: unescape_if_needed(fields[2]),
+        prefix: unescape_if_needed(fields[3]),
+        suffix: unescape_if_needed(fields[4]),
     })
 }
 

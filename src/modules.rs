@@ -4,6 +4,7 @@ pub mod env;
 pub mod fail;
 pub mod git;
 pub mod go;
+pub mod json;
 pub mod node;
 pub mod ok;
 pub mod path;

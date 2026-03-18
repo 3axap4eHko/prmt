@@ -17,7 +17,7 @@ fn estimate_output_size(template_len: usize) -> usize {
 enum RenderSlot<'a> {
     Static(Cow<'a, str>),
     Dynamic {
-        params: Params,
+        params: Params<'a>,
         module: ModuleRef,
         output: OnceLock<Option<String>>,
     },
@@ -85,7 +85,7 @@ fn render_tokens_sequential<'a>(
             Token::Placeholder(params) => {
                 let module = registry
                     .get(&params.module)
-                    .ok_or_else(|| PromptError::UnknownModule(params.module.clone()))?;
+                    .ok_or_else(|| PromptError::UnknownModule(params.module.to_string()))?;
 
                 if let Some(value) = render_placeholder(&module, &params, context, no_color)? {
                     output.push_str(&value);
@@ -114,7 +114,7 @@ fn render_tokens_parallel<'a>(
             Token::Placeholder(params) => {
                 let module = registry
                     .get(&params.module)
-                    .ok_or_else(|| PromptError::UnknownModule(params.module.clone()))?;
+                    .ok_or_else(|| PromptError::UnknownModule(params.module.to_string()))?;
 
                 let index = slots.len();
                 slots.push(RenderSlot::Dynamic {
@@ -165,7 +165,14 @@ pub fn execute(
     exit_code: Option<i32>,
     no_color: bool,
 ) -> Result<String> {
-    execute_with_shell(format_str, no_version, exit_code, no_color, Shell::None)
+    execute_with_shell(
+        format_str,
+        no_version,
+        exit_code,
+        no_color,
+        Shell::None,
+        None,
+    )
 }
 
 pub fn execute_with_shell(
@@ -174,6 +181,7 @@ pub fn execute_with_shell(
     exit_code: Option<i32>,
     no_color: bool,
     shell: Shell,
+    stdin_data: Option<Arc<serde_json::Value>>,
 ) -> Result<String> {
     let tokens = parse(format_str);
     let (registry, placeholder_count) = build_registry(&tokens)?;
@@ -188,6 +196,7 @@ pub fn execute_with_shell(
         exit_code,
         detection,
         shell,
+        stdin_data,
     };
     let resolved_no_color = no_color || global_no_color();
     render_tokens(
@@ -232,7 +241,7 @@ fn render_placeholder(
     }
 
     let style = AnsiStyle::parse(&params.style).map_err(|error| PromptError::StyleError {
-        module: params.module.clone(),
+        module: params.module.to_string(),
         error,
     })?;
     let styled = style.apply_with_shell(&segment, context.shell);
@@ -271,7 +280,7 @@ fn build_registry(tokens: &[Token<'_>]) -> Result<(ModuleRegistry, usize)> {
     for token in tokens {
         if let Token::Placeholder(params) = token {
             placeholder_count += 1;
-            let name = params.module.as_str();
+            let name: &str = &params.module;
             if required.insert(name) {
                 let module = instantiate_module(name)
                     .ok_or_else(|| PromptError::UnknownModule(name.to_string()))?;
@@ -298,6 +307,7 @@ fn instantiate_module(name: &str) -> Option<ModuleRef> {
         "deno" => Arc::new(deno::DenoModule::new()),
         "bun" => Arc::new(bun::BunModule::new()),
         "time" => Arc::new(time::TimeModule),
+        "json" => Arc::new(json::JsonModule::new()),
         _ => return None,
     })
 }

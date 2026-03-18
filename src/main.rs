@@ -1,8 +1,10 @@
 use std::env;
 #[cfg(target_os = "linux")]
 use std::fs;
+use std::io::Read;
 use std::process::ExitCode;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Instant;
 
 mod detector;
@@ -30,6 +32,7 @@ OPTIONS:
     -n, --no-version        Skip version detection for speed
     -d, --debug             Show debug information and timing
     -b, --bench             Run benchmark (100 iterations)
+        --stdin             Read JSON from stdin (enables json module)
         --code <CODE>       Exit code of the last command (for ok/fail modules)
         --no-color          Disable colored output
         --shell <SHELL>     Wrap ANSI escapes for the specified shell (bash, zsh, none)
@@ -42,6 +45,7 @@ struct Cli {
     no_version: bool,
     debug: bool,
     bench: bool,
+    stdin: bool,
     code: Option<i32>,
     no_color: bool,
     shell: Option<style::Shell>,
@@ -62,6 +66,7 @@ where
     let mut no_version = false;
     let mut debug = false;
     let mut bench = false;
+    let mut stdin = false;
     let mut code = None;
     let mut no_color = false;
     let mut shell = None;
@@ -88,6 +93,9 @@ where
             }
             Short('b') | Long("bench") => {
                 bench = true;
+            }
+            Long("stdin") => {
+                stdin = true;
             }
             Long("code") => {
                 code = Some(parser.value()?.parse()?);
@@ -116,6 +124,7 @@ where
         no_version,
         debug,
         bench,
+        stdin,
         code,
         no_color,
         shell,
@@ -215,8 +224,17 @@ fn main() -> ExitCode {
 
     let shell = resolve_shell(cli.shell);
 
+    let stdin_data = if cli.stdin { read_stdin_json() } else { None };
+
     let result = if cli.bench {
-        handle_bench(&format, cli.no_version, cli.code, cli.no_color, shell)
+        handle_bench(
+            &format,
+            cli.no_version,
+            cli.code,
+            cli.no_color,
+            shell,
+            stdin_data,
+        )
     } else {
         handle_format(
             &format,
@@ -225,6 +243,7 @@ fn main() -> ExitCode {
             cli.code,
             cli.no_color,
             shell,
+            stdin_data,
         )
     };
 
@@ -240,6 +259,12 @@ fn main() -> ExitCode {
     }
 }
 
+fn read_stdin_json() -> Option<Arc<serde_json::Value>> {
+    let mut buf = String::new();
+    std::io::stdin().read_to_string(&mut buf).ok()?;
+    serde_json::from_str(&buf).ok().map(Arc::new)
+}
+
 fn handle_format(
     format: &str,
     no_version: bool,
@@ -247,10 +272,13 @@ fn handle_format(
     exit_code: Option<i32>,
     no_color: bool,
     shell: style::Shell,
+    stdin_data: Option<Arc<serde_json::Value>>,
 ) -> error::Result<String> {
     if debug {
         let start = Instant::now();
-        let output = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
+        let output = executor::execute_with_shell(
+            format, no_version, exit_code, no_color, shell, stdin_data,
+        )?;
         let elapsed = start.elapsed();
 
         eprintln!("Format: {}", format);
@@ -258,7 +286,7 @@ fn handle_format(
 
         Ok(output)
     } else {
-        executor::execute_with_shell(format, no_version, exit_code, no_color, shell)
+        executor::execute_with_shell(format, no_version, exit_code, no_color, shell, stdin_data)
     }
 }
 
@@ -268,12 +296,20 @@ fn handle_bench(
     exit_code: Option<i32>,
     no_color: bool,
     shell: style::Shell,
+    stdin_data: Option<Arc<serde_json::Value>>,
 ) -> error::Result<String> {
     let mut times = Vec::new();
 
     for _ in 0..100 {
         let start = Instant::now();
-        let _ = executor::execute_with_shell(format, no_version, exit_code, no_color, shell)?;
+        let _ = executor::execute_with_shell(
+            format,
+            no_version,
+            exit_code,
+            no_color,
+            shell,
+            stdin_data.clone(),
+        )?;
         times.push(start.elapsed());
     }
 

@@ -36,7 +36,7 @@ impl<'a> Template<'a> {
                 }
                 Token::Placeholder(params) => {
                     let module = registry.get(&params.module).ok_or_else(|| {
-                        crate::error::PromptError::UnknownModule(params.module.clone())
+                        crate::error::PromptError::UnknownModule(params.module.to_string())
                     })?;
 
                     if let Some(text) = module.render(&params.format, context)?
@@ -49,7 +49,7 @@ impl<'a> Template<'a> {
                         if styled {
                             let style = AnsiStyle::parse(&params.style).map_err(|error| {
                                 crate::error::PromptError::StyleError {
-                                    module: params.module.clone(),
+                                    module: params.module.to_string(),
                                     error,
                                 }
                             })?;
