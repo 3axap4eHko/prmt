@@ -1,0 +1,29 @@
+#!/bin/sh
+
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/tags/*)
+      if ! command -v gh >/dev/null 2>&1; then
+        echo "Error: gh CLI is required to verify CI status before pushing tags"
+        exit 1
+      fi
+
+      commit_sha=$(git rev-parse "${local_sha}^{commit}" 2>/dev/null || echo "$local_sha")
+      status=$(gh run list --commit "$commit_sha" --json conclusion -q '.[0].conclusion' 2>/dev/null)
+
+      if [ -z "$status" ]; then
+        echo "Error: No CI run found for commit $local_sha"
+        echo "Push the commit first and wait for CI to complete before tagging."
+        exit 1
+      fi
+
+      if [ "$status" != "success" ]; then
+        echo "Error: CI status is '$status' for commit $local_sha"
+        echo "Fix CI before pushing tag ${remote_ref#refs/tags/}"
+        exit 1
+      fi
+
+      echo "CI passed for $local_sha - pushing tag ${remote_ref#refs/tags/}"
+      ;;
+  esac
+done
