@@ -25,6 +25,10 @@ impl Module for BunModule {
         BUN_MARKERS
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         let has_marker = BUN_MARKERS
             .iter()

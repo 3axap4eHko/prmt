@@ -30,6 +30,10 @@ impl Module for RustModule {
         &["Cargo.toml"]
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         if context.marker_path("Cargo.toml").is_none() {
             return Ok(None);

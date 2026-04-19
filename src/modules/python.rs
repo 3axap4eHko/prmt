@@ -23,6 +23,10 @@ impl Module for PythonModule {
         &["requirements.txt", "pyproject.toml", "setup.py"]
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         let has_marker = ["requirements.txt", "pyproject.toml", "setup.py"]
             .into_iter()

@@ -35,6 +35,10 @@ impl Module for NodeModule {
         &["package.json"]
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         if context.marker_path("package.json").is_none() {
             return Ok(None);

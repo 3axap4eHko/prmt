@@ -16,11 +16,11 @@ use gix::status::Item as StatusItem;
 use gix::status::index_worktree::Item as IndexWorktreeItem;
 #[cfg(feature = "git-gix")]
 use gix::status::plumbing::index_as_worktree::EntryStatus as IndexEntryStatus;
-use rayon::join;
 use std::path::Path;
 use std::process::Command;
 #[cfg(feature = "git-gix")]
 use std::sync::Arc;
+use std::thread;
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
@@ -183,10 +183,12 @@ fn current_branch_from_cli(repo_root: &Path) -> Option<String> {
 
 fn branch_and_status_cli(repo_root: &Path, need_status: bool) -> (String, GitStatus) {
     if need_status {
-        join(
-            || current_branch_from_cli(repo_root).unwrap_or_else(|| "HEAD".to_string()),
-            || get_git_status_slow(repo_root),
-        )
+        thread::scope(|s| {
+            let branch = s
+                .spawn(|| current_branch_from_cli(repo_root).unwrap_or_else(|| "HEAD".to_string()));
+            let status = get_git_status_slow(repo_root);
+            (branch.join().unwrap_or_else(|_| "HEAD".to_string()), status)
+        })
     } else {
         (
             current_branch_from_cli(repo_root).unwrap_or_else(|| "HEAD".to_string()),
@@ -202,19 +204,16 @@ fn branch_and_status(repo_root: &Path, need_status: bool) -> (String, GitStatus)
             let repo = Arc::new(repo);
             if need_status {
                 let repo_for_branch = Arc::clone(&repo);
-                let repo_for_status = Arc::clone(&repo);
-                let repo_root_for_status = repo_root;
-                join(
-                    || {
+                thread::scope(|s| {
+                    let branch = s.spawn(|| {
                         let local = repo_for_branch.to_thread_local();
                         current_branch_from_repo(&local)
-                    },
-                    || {
-                        let local = repo_for_status.to_thread_local();
-                        collect_git_status_fast(&local)
-                            .unwrap_or_else(|| get_git_status_slow(repo_root_for_status))
-                    },
-                )
+                    });
+                    let local = repo.to_thread_local();
+                    let status = collect_git_status_fast(&local)
+                        .unwrap_or_else(|| get_git_status_slow(repo_root));
+                    (branch.join().unwrap_or_else(|_| "HEAD".to_string()), status)
+                })
             } else {
                 let local = repo.to_thread_local();
                 (current_branch_from_repo(&local), GitStatus::empty())
@@ -292,6 +291,10 @@ fn is_repo_owned_by_user(repo_root: &Path) -> bool {
 impl Module for GitModule {
     fn fs_markers(&self) -> &'static [&'static str] {
         &[".git"]
+    }
+
+    fn is_blocking(&self) -> bool {
+        true
     }
 
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {

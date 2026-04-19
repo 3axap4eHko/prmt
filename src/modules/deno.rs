@@ -23,6 +23,10 @@ impl Module for DenoModule {
         &["deno.json", "deno.jsonc"]
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         let has_marker = ["deno.json", "deno.jsonc"]
             .into_iter()

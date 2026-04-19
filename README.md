@@ -448,6 +448,21 @@ Examples: `#ffffff+#333333`, `+blue`, `cyan+#222.dim`
 
 > Measurements captured on an Intel Core i9-13900K host with project files on a SATA SSD (Rust 1.90.0 release build). Each value is the median of 100 `cargo bench` runs.
 
+### Prompt Timeout
+
+Prompt timeout is disabled by default. If you enable it, modules that do not finish before the timeout show `...` instead of blocking the prompt. This is a latency tradeoff for slow filesystems like network drives, WSL2 `/mnt/c/`, or NFS mounts.
+
+Benchmark mode ignores this setting so `--bench` measures the actual module work instead of the timeout fallback.
+
+```bash
+# Adjust timeout (milliseconds)
+prmt --timeout 30 '{path} {git}'    # 30ms prompt timeout
+prmt --timeout 0 '{path} {git}'     # disable timeout
+
+# Or set via environment variable
+export PRMT_TIMEOUT=50
+```
+
 **Why is it fast?**
 - Zero-copy parsing with SIMD optimizations
 - Efficient memory allocation strategies
@@ -462,8 +477,9 @@ prmt [OPTIONS] [FORMAT]
 
 OPTIONS:
     -n, --no-version        Skip version detection for speed
+    -t, --timeout <MS>      Prompt timeout in ms (default 0, disabled)
     -d, --debug             Show debug information and timing
-    -b, --bench             Run benchmark (100 iterations)
+    -b, --bench             Run benchmark (100 iterations, ignores module timeout)
         --stdin             Read JSON from stdin (enables json module)
         --code <CODE>       Exit code of the last command (for ok/fail modules)
         --no-color          Disable colored output
@@ -473,6 +489,10 @@ OPTIONS:
 
 ARGS:
     <FORMAT>           Format string (default from PRMT_FORMAT env var)
+
+ENVIRONMENT:
+    PRMT_FORMAT             Default format string
+    PRMT_TIMEOUT            Prompt timeout in ms (overridden by --timeout)
 ```
 
 ## Building from Source

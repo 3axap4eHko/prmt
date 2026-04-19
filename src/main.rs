@@ -5,7 +5,7 @@ use std::io::Read;
 use std::process::ExitCode;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 mod detector;
 mod error;
@@ -30,8 +30,9 @@ ARGS:
 OPTIONS:
     -f, --format <FORMAT>    Format string
     -n, --no-version        Skip version detection for speed
+    -t, --timeout <MS>      Prompt timeout in ms (default 0, disabled)
     -d, --debug             Show debug information and timing
-    -b, --bench             Run benchmark (100 iterations)
+    -b, --bench             Run benchmark (100 iterations, ignores module timeout)
         --stdin             Read JSON from stdin (enables json module)
         --code <CODE>       Exit code of the last command (for ok/fail modules)
         --no-color          Disable colored output
@@ -43,6 +44,7 @@ OPTIONS:
 struct Cli {
     format: Option<String>,
     no_version: bool,
+    timeout: Option<u64>,
     debug: bool,
     bench: bool,
     stdin: bool,
@@ -64,6 +66,7 @@ where
 
     let mut format = None;
     let mut no_version = false;
+    let mut timeout = None;
     let mut debug = false;
     let mut bench = false;
     let mut stdin = false;
@@ -87,6 +90,9 @@ where
             }
             Short('n') | Long("no-version") => {
                 no_version = true;
+            }
+            Short('t') | Long("timeout") => {
+                timeout = Some(parser.value()?.parse()?);
             }
             Short('d') | Long("debug") => {
                 debug = true;
@@ -122,6 +128,7 @@ where
     Ok(Cli {
         format,
         no_version,
+        timeout,
         debug,
         bench,
         stdin,
@@ -224,6 +231,16 @@ fn main() -> ExitCode {
 
     let shell = resolve_shell(cli.shell);
 
+    let timeout_ms = cli
+        .timeout
+        .or_else(|| env::var("PRMT_TIMEOUT").ok()?.parse().ok())
+        .unwrap_or(0);
+    let timeout = if timeout_ms > 0 {
+        Some(Duration::from_millis(timeout_ms))
+    } else {
+        None
+    };
+
     let stdin_data = if cli.stdin { read_stdin_json() } else { None };
 
     let result = if cli.bench {
@@ -236,15 +253,22 @@ fn main() -> ExitCode {
             stdin_data,
         )
     } else {
-        handle_format(
+        let start = cli.debug.then(Instant::now);
+        let output = executor::execute_with_shell(
             &format,
             cli.no_version,
-            cli.debug,
             cli.code,
             cli.no_color,
             shell,
             stdin_data,
-        )
+            timeout,
+        );
+        if let Some(start) = start {
+            let elapsed = start.elapsed();
+            eprintln!("Format: {}", format);
+            eprintln!("Execution time: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
+        }
+        output
     };
 
     match result {
@@ -263,31 +287,6 @@ fn read_stdin_json() -> Option<Arc<serde_json::Value>> {
     let mut buf = String::new();
     std::io::stdin().read_to_string(&mut buf).ok()?;
     serde_json::from_str(&buf).ok().map(Arc::new)
-}
-
-fn handle_format(
-    format: &str,
-    no_version: bool,
-    debug: bool,
-    exit_code: Option<i32>,
-    no_color: bool,
-    shell: style::Shell,
-    stdin_data: Option<Arc<serde_json::Value>>,
-) -> error::Result<String> {
-    if debug {
-        let start = Instant::now();
-        let output = executor::execute_with_shell(
-            format, no_version, exit_code, no_color, shell, stdin_data,
-        )?;
-        let elapsed = start.elapsed();
-
-        eprintln!("Format: {}", format);
-        eprintln!("Execution time: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
-
-        Ok(output)
-    } else {
-        executor::execute_with_shell(format, no_version, exit_code, no_color, shell, stdin_data)
-    }
 }
 
 fn handle_bench(
@@ -309,6 +308,7 @@ fn handle_bench(
             no_color,
             shell,
             stdin_data.clone(),
+            None,
         )?;
         times.push(start.elapsed());
     }

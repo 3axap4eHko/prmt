@@ -24,6 +24,10 @@ pub trait Module: Send + Sync {
         &[]
     }
 
+    fn is_blocking(&self) -> bool {
+        false
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>>;
 }
 

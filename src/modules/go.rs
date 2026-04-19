@@ -23,6 +23,10 @@ impl Module for GoModule {
         &["go.mod"]
     }
 
+    fn is_blocking(&self) -> bool {
+        true
+    }
+
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         if context.marker_path("go.mod").is_none() {
             return Ok(None);
