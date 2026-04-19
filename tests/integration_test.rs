@@ -115,6 +115,11 @@ fn test_path_formats() {
     let result_absolute =
         execute("{path::absolute}", true, None, false).expect("Failed to execute");
     let result_absolute_a = execute("{path::a}", true, None, false).expect("Failed to execute");
+    let result_initials =
+        execute("{path::initials}", true, None, false).expect("Failed to execute");
+    let result_initials_i = execute("{path::i}", true, None, false).expect("Failed to execute");
+    let result_unvowel = execute("{path::unvowel}", true, None, false).expect("Failed to execute");
+    let result_unvowel_u = execute("{path::u}", true, None, false).expect("Failed to execute");
     let result_short = execute("{path::short}", true, None, false).expect("Failed to execute");
     let result_short_s = execute("{path::s}", true, None, false).expect("Failed to execute");
     let result_default = execute("{path}", true, None, false).expect("Failed to execute");
@@ -130,6 +135,10 @@ fn test_path_formats() {
     assert!(result_relative.contains(basename) || result_relative.contains("~"));
     assert_eq!(result_relative, result_relative_r); // Short and long forms should match
     assert_eq!(result_relative, result_default); // Default should be relative
+    assert_eq!(result_initials, result_initials_i);
+    assert_eq!(result_unvowel, result_unvowel_u);
+    assert!(!result_initials.is_empty());
+    assert!(!result_unvowel.is_empty());
 
     // Absolute formats should never contain ~ and should always contain the basename
     assert!(!result_absolute.contains("~"));

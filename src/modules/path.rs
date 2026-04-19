@@ -28,6 +28,85 @@ fn normalize_separators(value: String) -> String {
     value
 }
 
+fn first_char(segment: &str) -> Option<char> {
+    segment.chars().next()
+}
+
+fn shorten_segment_to_initial(segment: &str) -> String {
+    if let Some(rest) = segment.strip_prefix('.')
+        && let Some(initial) = first_char(rest)
+    {
+        let mut shortened = String::with_capacity(2);
+        shortened.push('.');
+        shortened.push(initial);
+        return shortened;
+    }
+
+    first_char(segment)
+        .map(|initial| initial.to_string())
+        .unwrap_or_default()
+}
+
+fn is_ascii_vowel(ch: char) -> bool {
+    matches!(
+        ch,
+        'a' | 'e' | 'i' | 'o' | 'u' | 'A' | 'E' | 'I' | 'O' | 'U'
+    )
+}
+
+fn unvowel_body(segment: &str) -> String {
+    if segment.chars().count() <= 3 {
+        return segment.to_string();
+    }
+
+    let mut chars = segment.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+
+    let mut shortened = String::with_capacity(segment.len());
+    shortened.push(first);
+    for ch in chars {
+        if !is_ascii_vowel(ch) {
+            shortened.push(ch);
+        }
+    }
+    shortened
+}
+
+fn unvowel_segment(segment: &str) -> String {
+    if let Some(rest) = segment.strip_prefix('.') {
+        let mut shortened = String::with_capacity(segment.len());
+        shortened.push('.');
+        shortened.push_str(&unvowel_body(rest));
+        return shortened;
+    }
+
+    unvowel_body(segment)
+}
+
+fn transform_relative_path(
+    path: &str,
+    preserve_last: bool,
+    transform: fn(&str) -> String,
+) -> String {
+    let segments: Vec<&str> = path.split('/').collect();
+    let last_index = segments.len().saturating_sub(1);
+    let mut rendered = Vec::with_capacity(segments.len());
+
+    for (index, segment) in segments.iter().enumerate() {
+        let transformed =
+            if segment.is_empty() || *segment == "~" || (preserve_last && index == last_index) {
+                (*segment).to_string()
+            } else {
+                transform(segment)
+            };
+        rendered.push(transformed);
+    }
+
+    rendered.join("/")
+}
+
 fn normalize_relative_path(current_dir: &Path) -> String {
     let current_canon = current_dir
         .canonicalize()
@@ -60,6 +139,16 @@ impl Module for PathModule {
         match format {
             "" | "relative" | "r" => Ok(Some(normalize_relative_path(&current_dir))),
             "absolute" | "a" | "f" => Ok(Some(current_dir.to_string_lossy().to_string())),
+            "initials" | "i" => Ok(Some(transform_relative_path(
+                &normalize_relative_path(&current_dir),
+                true,
+                shorten_segment_to_initial,
+            ))),
+            "unvowel" | "u" => Ok(Some(transform_relative_path(
+                &normalize_relative_path(&current_dir),
+                false,
+                unvowel_segment,
+            ))),
             "short" | "s" => Ok(current_dir
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -102,7 +191,9 @@ impl Module for PathModule {
             _ => Err(PromptError::InvalidFormat {
                 module: "path".to_string(),
                 format: format.to_string(),
-                valid_formats: "relative, r, absolute, a, f, short, s, truncate:N".to_string(),
+                valid_formats:
+                    "relative, r, absolute, a, f, initials, i, unvowel, u, short, s, truncate:N"
+                        .to_string(),
             }),
         }
     }
@@ -219,5 +310,45 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn initials_preserve_last_segment_and_hidden_prefixes() {
+        assert_eq!(
+            transform_relative_path("~/dev/.config/prmt", true, shorten_segment_to_initial),
+            "~/d/.c/prmt"
+        );
+        assert_eq!(
+            transform_relative_path("/usr/local/bin", true, shorten_segment_to_initial),
+            "/u/l/bin"
+        );
+        assert_eq!(
+            transform_relative_path("~/.config", true, shorten_segment_to_initial),
+            "~/.config"
+        );
+    }
+
+    #[test]
+    fn unvowel_shortens_all_segments() {
+        assert_eq!(
+            transform_relative_path("~/projects/obsidian", false, unvowel_segment),
+            "~/prjcts/obsdn"
+        );
+        assert_eq!(
+            transform_relative_path("~/.config/nvim", false, unvowel_segment),
+            "~/.cnfg/nvm"
+        );
+    }
+
+    #[test]
+    fn unvowel_leaves_short_segments_unchanged() {
+        assert_eq!(
+            transform_relative_path("~/dev/api/prmt", false, unvowel_segment),
+            "~/dev/api/prmt"
+        );
+        assert_eq!(
+            transform_relative_path("~/.git/config", false, unvowel_segment),
+            "~/.git/cnfg"
+        );
     }
 }

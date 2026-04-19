@@ -225,6 +225,8 @@ prmt '{path} {rust} {git}'
 # Format with types and styles
 prmt '{path::a}'                  # /home/user/projects (absolute path)
 prmt '{path::r}'                  # ~/projects (relative with ~)
+prmt '{path::i}'                  # ~/p/projects (parent initials, last segment preserved)
+prmt '{path::u}'                  # ~/prjcts (interior vowels stripped)
 prmt '{path::s}'                  # projects (short - last dir only)
 prmt '{rust:red:s}'               # 1.89 in red (short version)
 prmt '{rust:red:m:v:}'            # v1 in red (major version with prefix)
@@ -329,7 +331,10 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 **Path module**:
 - `relative` or `r` - Path with ~ for home directory (default)
 - `absolute`, `a`, or `f` - Full absolute path without ~ substitution
+- `initials` or `i` - Parent segments shortened to their first character; last segment kept full (hidden dirs keep the leading `.`)
+- `unvowel` or `u` - Interior vowels stripped from each segment; first character kept; segments ≤ 3 chars unchanged
 - `short` or `s` - Last directory only
+- `truncate:N` - Relative path, truncated with `...` when wider than `N` columns
 
 **Git module**:
 - `full` or `f` - Branch with status (default)
@@ -379,13 +384,15 @@ The format parser validates types at parse time to catch errors early:
 ```bash
 # Valid types for each module
 prmt '{path::short}'     # ✓ Valid
+prmt '{path::initials}'  # ✓ Valid
+prmt '{path::unvowel}'   # ✓ Valid
 prmt '{rust::major}'     # ✓ Valid
 prmt '{ok::✓}'          # ✓ Valid (custom symbol)
 prmt '{fail::code}'     # ✓ Valid (shows exit code)
 
 # Invalid types produce clear errors
 prmt '{path::major}'
-# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, absolute, a, short, s
+# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, absolute, a, f, initials, i, unvowel, u, short, s, truncate:N
 
 prmt '{git::major}'
 # Error: Invalid type 'major' for module 'git'. Valid types: full, short
@@ -479,7 +486,7 @@ OPTIONS:
     -n, --no-version        Skip version detection for speed
     -t, --timeout <MS>      Prompt timeout in ms (default 0, disabled)
     -d, --debug             Show debug information and timing
-    -b, --bench             Run benchmark (100 iterations, ignores module timeout)
+    -b, --bench             Run benchmark (100 iterations, ignores prompt timeout)
         --stdin             Read JSON from stdin (enables json module)
         --code <CODE>       Exit code of the last command (for ok/fail modules)
         --no-color          Disable colored output

@@ -367,12 +367,12 @@ fn render_module_with_timeout(
     module: &ModuleRef,
     format: &str,
     context: &ModuleContext,
-    timeout: Duration,
+    timeout: Option<Duration>,
 ) -> Result<Option<String>> {
     let (done_tx, done_rx) = mpsc::channel();
     spawn_slot_render(0, module_name, module, format, context, &done_tx);
     drop(done_tx);
-    let reply = recv_reply_until(&done_rx, Some(Instant::now() + timeout));
+    let reply = recv_reply_until(&done_rx, timeout.map(|timeout| Instant::now() + timeout));
 
     match reply.map(|reply| reply.result) {
         Some(SlotResult::Value(text)) => Ok(text),
@@ -389,11 +389,10 @@ fn render_placeholder(
     no_color: bool,
     timeout: Option<Duration>,
 ) -> Result<Option<String>> {
-    let text = match timeout {
-        Some(timeout) => {
-            render_module_with_timeout(&params.module, module, &params.format, context, timeout)?
-        }
-        None => module.render(&params.format, context)?,
+    let text = if timeout.is_some() {
+        render_module_with_timeout(&params.module, module, &params.format, context, timeout)?
+    } else {
+        module.render(&params.format, context)?
     };
     style_output(text, params, context, no_color)
 }
@@ -542,7 +541,7 @@ mod tests {
         });
         let ctx = test_context();
         let result =
-            render_module_with_timeout("test", &module, "", &ctx, Duration::from_millis(5))
+            render_module_with_timeout("test", &module, "", &ctx, Some(Duration::from_millis(5)))
                 .unwrap();
         assert_eq!(result, Some(TIMEOUT_PLACEHOLDER.to_string()));
     }
@@ -556,7 +555,7 @@ mod tests {
         });
         let ctx = test_context();
         let result =
-            render_module_with_timeout("test", &module, "", &ctx, Duration::from_millis(100))
+            render_module_with_timeout("test", &module, "", &ctx, Some(Duration::from_millis(100)))
                 .unwrap();
         assert_eq!(result, Some("fast_result".to_string()));
     }
@@ -567,7 +566,7 @@ mod tests {
         let module: ModuleRef = Arc::new(NoneModule);
         let ctx = test_context();
         let result =
-            render_module_with_timeout("test", &module, "", &ctx, Duration::from_millis(100))
+            render_module_with_timeout("test", &module, "", &ctx, Some(Duration::from_millis(100)))
                 .unwrap();
         assert_eq!(result, None);
     }
@@ -623,12 +622,10 @@ mod tests {
 
     #[test]
     #[serial]
-    fn panic_module_returns_error_with_timeout() {
+    fn panic_module_returns_error() {
         let module: ModuleRef = Arc::new(PanicModule);
         let ctx = test_context();
-        let err =
-            render_module_with_timeout("panic", &module, "", &ctx, Duration::from_millis(100))
-                .unwrap_err();
+        let err = render_module_with_timeout("panic", &module, "", &ctx, None).unwrap_err();
         assert!(matches!(err, PromptError::ModulePanic(name) if name == "panic"));
     }
 
