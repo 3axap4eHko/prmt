@@ -334,7 +334,6 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 - `initials` or `i` - Parent segments shortened to their first character; last segment kept full (hidden dirs keep the leading `.`)
 - `unvowel` or `u` - Interior vowels stripped from each segment; first character kept; segments ≤ 3 chars unchanged
 - `short` or `s` - Last directory only
-- `truncate:N` - Relative path, truncated with `...` when wider than `N` columns
 
 **Git module**:
 - `full` or `f` - Branch with status (default)
@@ -392,7 +391,7 @@ prmt '{fail::code}'     # ✓ Valid (shows exit code)
 
 # Invalid types produce clear errors
 prmt '{path::major}'
-# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, absolute, a, f, initials, i, unvowel, u, short, s, truncate:N
+# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, absolute, a, f, initials, i, unvowel, u, short, s
 
 prmt '{git::major}'
 # Error: Invalid type 'major' for module 'git'. Valid types: full, short

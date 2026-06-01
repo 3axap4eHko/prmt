@@ -42,6 +42,7 @@ fn ctx(no_version: bool, exit_code: Option<i32>, markers: &[&'static str]) -> Mo
         detection: detection_for(markers),
         shell: Shell::None,
         stdin_data: None,
+        cwd: std::env::current_dir().ok(),
     }
 }
 
@@ -59,7 +60,7 @@ fn bench_parser_scenarios(c: &mut Criterion) {
         ),
         (
             "large",
-            "{path:cyan:truncate:30:>>:<<} {rust:red:full} {node:green:major} {python:yellow:short} {go:blue} {deno:magenta} {bun:white} {elixir:purple} {git:purple:full:🌿:} {ok:green:✓} {fail:red:✗}",
+            "{path:cyan:short:[:]} {rust:red:full} {node:green:major} {python:yellow:short} {go:blue} {deno:magenta} {bun:white} {elixir:purple} {git:purple:full:🌿:} {ok:green:✓} {fail:red:✗}",
         ),
         (
             "escaped_heavy",
@@ -286,31 +287,6 @@ fn bench_string_operations(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_unicode_operations(c: &mut Criterion) {
-    let mut group = c.benchmark_group("unicode");
-
-    use unicode_width::UnicodeWidthStr;
-
-    let strings = vec![
-        ("ascii", "hello world"),
-        ("emoji", "👋 🌍 Hello World! 🎉"),
-        ("cjk", "你好世界 こんにちは世界"),
-        ("mixed", "Hello 世界 🌍 мир"),
-    ];
-
-    for (name, text) in strings {
-        group.bench_with_input(
-            BenchmarkId::new("width_calculation", name),
-            &text,
-            |b, &text| {
-                b.iter(|| UnicodeWidthStr::width(black_box(text)));
-            },
-        );
-    }
-
-    group.finish();
-}
-
 fn bench_style_parsing(c: &mut Criterion) {
     use prmt::style::{AnsiStyle, ModuleStyle};
 
@@ -374,7 +350,6 @@ criterion_group!(
     bench_end_to_end_scenarios,
     bench_memo_effectiveness,
     bench_string_operations,
-    bench_unicode_operations,
     bench_style_parsing,
     bench_worst_case_scenarios
 );

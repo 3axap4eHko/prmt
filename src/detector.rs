@@ -29,16 +29,26 @@ impl Default for DetectionContext {
     }
 }
 
+#[allow(dead_code)]
 pub fn detect(required: &HashSet<&'static str>) -> DetectionContext {
     if required.is_empty() {
         return DetectionContext::empty();
     }
 
-    let Ok(mut current_dir) = env::current_dir() else {
+    let Ok(current_dir) = env::current_dir() else {
         return DetectionContext::empty();
     };
 
+    detect_from(required, &current_dir)
+}
+
+pub fn detect_from(required: &HashSet<&'static str>, start_dir: &Path) -> DetectionContext {
+    if required.is_empty() {
+        return DetectionContext::empty();
+    }
+
     let mut found: HashMap<&'static str, PathBuf> = HashMap::with_capacity(required.len());
+    let mut current_dir = start_dir.to_path_buf();
     let mut depth = 0usize;
     let mut candidate = PathBuf::new();
 
@@ -157,5 +167,26 @@ mod tests {
         let ctx = detect(&required);
 
         assert!(ctx.get("Cargo.toml").is_none());
+    }
+
+    #[test]
+    fn detect_from_uses_provided_start_directory() {
+        let tmp = tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let nested = project.join("src/bin");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(project.join("Cargo.toml"), b"[package]").unwrap();
+
+        let required: HashSet<&'static str> = ["Cargo.toml"].into_iter().collect();
+        let ctx = detect_from(&required, &nested);
+
+        let cargo = ctx
+            .get("Cargo.toml")
+            .expect("detector should find Cargo.toml from provided path");
+        assert!(cargo.ends_with("Cargo.toml"));
+        assert_eq!(
+            cargo.parent().and_then(|p| p.file_name()),
+            project.file_name()
+        );
     }
 }

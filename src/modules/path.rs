@@ -1,8 +1,6 @@
 use crate::error::{PromptError, Result};
 use crate::module_trait::{Module, ModuleContext};
-use std::env;
 use std::path::Path;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub struct PathModule;
 
@@ -130,22 +128,21 @@ fn normalize_relative_path(current_dir: &Path) -> String {
 }
 
 impl Module for PathModule {
-    fn render(&self, format: &str, _context: &ModuleContext) -> Result<Option<String>> {
-        let current_dir = match env::current_dir() {
-            Ok(d) => d,
-            Err(_) => return Ok(None),
+    fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
+        let Some(current_dir) = context.current_dir() else {
+            return Ok(None);
         };
 
         match format {
-            "" | "relative" | "r" => Ok(Some(normalize_relative_path(&current_dir))),
+            "" | "relative" | "r" => Ok(Some(normalize_relative_path(current_dir))),
             "absolute" | "a" | "f" => Ok(Some(current_dir.to_string_lossy().to_string())),
             "initials" | "i" => Ok(Some(transform_relative_path(
-                &normalize_relative_path(&current_dir),
+                &normalize_relative_path(current_dir),
                 true,
                 shorten_segment_to_initial,
             ))),
             "unvowel" | "u" => Ok(Some(transform_relative_path(
-                &normalize_relative_path(&current_dir),
+                &normalize_relative_path(current_dir),
                 false,
                 unvowel_segment,
             ))),
@@ -154,46 +151,11 @@ impl Module for PathModule {
                 .and_then(|n| n.to_str())
                 .map(|s| s.to_string())
                 .or_else(|| Some(".".to_string()))),
-            format if format.starts_with("truncate:") => {
-                let max_width: usize = format
-                    .strip_prefix("truncate:")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(30);
-
-                let path = normalize_relative_path(&current_dir);
-
-                // Use unicode width for proper truncation
-                let width = UnicodeWidthStr::width(path.as_str());
-                if width <= max_width {
-                    Ok(Some(path))
-                } else {
-                    // Truncate with ellipsis
-                    let ellipsis = "...";
-                    let ellipsis_width = 3;
-                    let target_width = max_width.saturating_sub(ellipsis_width);
-
-                    let mut truncated = String::new();
-                    let mut current_width = 0;
-
-                    for ch in path.chars() {
-                        let ch_width = UnicodeWidthChar::width(ch).unwrap_or(0);
-                        if current_width + ch_width > target_width {
-                            break;
-                        }
-                        truncated.push(ch);
-                        current_width += ch_width;
-                    }
-
-                    truncated.push_str(ellipsis);
-                    Ok(Some(truncated))
-                }
-            }
             _ => Err(PromptError::InvalidFormat {
                 module: "path".to_string(),
                 format: format.to_string(),
-                valid_formats:
-                    "relative, r, absolute, a, f, initials, i, unvowel, u, short, s, truncate:N"
-                        .to_string(),
+                valid_formats: "relative, r, absolute, a, f, initials, i, unvowel, u, short, s"
+                    .to_string(),
             }),
         }
     }
@@ -203,6 +165,7 @@ impl Module for PathModule {
 mod tests {
     use super::*;
     use serial_test::serial;
+    use std::env;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 

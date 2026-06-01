@@ -1,4 +1,4 @@
-use crate::detector::{DetectionContext, detect};
+use crate::detector::{DetectionContext, detect_from};
 use crate::error::{PromptError, Result};
 use crate::module_trait::{ModuleContext, ModuleRef};
 use crate::parser::{Params, Token, parse};
@@ -338,10 +338,13 @@ pub fn execute_with_shell(
     let tokens = parse(format_str);
     let registry = build_registry(&tokens)?;
     let required_markers = registry.required_markers();
+    let cwd = std::env::current_dir().ok();
     let detection = if required_markers.is_empty() {
         DetectionContext::default()
+    } else if let Some(current_dir) = cwd.as_deref() {
+        detect_from(&required_markers, current_dir)
     } else {
-        detect(&required_markers)
+        DetectionContext::default()
     };
     let context = ModuleContext {
         no_version,
@@ -349,6 +352,7 @@ pub fn execute_with_shell(
         detection,
         shell,
         stdin_data,
+        cwd,
     };
     let resolved_no_color = no_color || global_no_color();
     render_tokens(
