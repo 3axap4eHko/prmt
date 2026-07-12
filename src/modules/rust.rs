@@ -1,5 +1,4 @@
 use crate::error::Result;
-use crate::memo::{RUST_VERSION, memoized_version};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use dirs::home_dir;
@@ -45,11 +44,11 @@ impl Module for RustModule {
 
         let normalized_format = utils::validate_version_format(format, "rust")?;
 
-        let version = match memoized_version(&RUST_VERSION, get_rust_version) {
+        let version = match get_rust_version() {
             Some(v) => v,
             None => return Ok(None),
         };
-        let version_str = version.as_ref();
+        let version_str = version.as_str();
 
         match normalized_format {
             "full" => Ok(Some(version_str.to_string())),

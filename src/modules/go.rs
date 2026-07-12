@@ -1,5 +1,4 @@
 use crate::error::Result;
-use crate::memo::{GO_VERSION, memoized_version};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -39,11 +38,11 @@ impl Module for GoModule {
         // Validate and normalize format
         let normalized_format = utils::validate_version_format(format, "go")?;
 
-        let version = match memoized_version(&GO_VERSION, get_go_version) {
+        let version = match get_go_version() {
             Some(v) => v,
             None => return Ok(None),
         };
-        let version_str = version.as_ref();
+        let version_str = version.as_str();
 
         match normalized_format {
             "full" => Ok(Some(version_str.to_string())),

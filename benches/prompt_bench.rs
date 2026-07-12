@@ -157,10 +157,7 @@ fn bench_version_modules(c: &mut Criterion) {
             b.iter(|| module.render(black_box(""), black_box(&context_no_version)));
         });
 
-        group.bench_function("rust_with_version_memoized", |b| {
-            // Warm up memoized value
-            let _ = module.render("", &context_with_version);
-
+        group.bench_function("rust_with_version", |b| {
             b.iter(|| module.render(black_box(""), black_box(&context_with_version)));
         });
     }

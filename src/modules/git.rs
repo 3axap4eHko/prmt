@@ -1,5 +1,4 @@
 use crate::error::{PromptError, Result};
-use crate::memo::{GIT_MEMO, GitInfo};
 use crate::module_trait::{Module, ModuleContext};
 use bitflags::bitflags;
 #[cfg(feature = "git-gix")]
@@ -61,7 +60,6 @@ impl GitModule {
 fn get_git_status_slow(repo_root: &Path) -> GitStatus {
     let mut status = GitStatus::empty();
 
-    // Only run git status if not memoized
     if let Ok(output) = std::process::Command::new("git")
         .arg("status")
         .arg("--porcelain=v1")
@@ -314,37 +312,8 @@ impl Module for GitModule {
             return Ok(None);
         }
 
-        // Check memoized info first
-        if let Some(memoized) = GIT_MEMO.get(repo_root) {
-            return Ok(match format.mode {
-                GitMode::Full => {
-                    let mut result = memoized.branch.clone();
-                    if memoized.has_changes {
-                        result.push('*');
-                    }
-                    if memoized.has_staged {
-                        result.push('+');
-                    }
-                    if memoized.has_untracked {
-                        result.push('?');
-                    }
-                    Some(result)
-                }
-                GitMode::Short => Some(memoized.branch),
-            });
-        }
-
         let need_status = matches!(format.mode, GitMode::Full);
         let (branch_name, status) = branch_and_status(repo_root, need_status);
-
-        // Memoize the result for other placeholders during this render
-        let info = GitInfo {
-            branch: branch_name.clone(),
-            has_changes: status.contains(GitStatus::MODIFIED),
-            has_staged: status.contains(GitStatus::STAGED),
-            has_untracked: status.contains(GitStatus::UNTRACKED),
-        };
-        GIT_MEMO.insert(repo_root.to_path_buf(), info);
 
         // Build result
         Ok(match format.mode {

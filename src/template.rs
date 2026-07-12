@@ -1,18 +1,19 @@
 use crate::error::Result;
+use crate::executor::validate_module_occurrences;
 use crate::module_trait::ModuleContext;
 use crate::parser::{Token, parse};
 use crate::registry::ModuleRegistry;
 use crate::style::{AnsiStyle, ModuleStyle, global_no_color};
 use is_terminal::IsTerminal;
 
-/// A parsed template that can be rendered multiple times efficiently
+/// A parsed template intended for a single render.
 pub struct Template<'a> {
     tokens: Vec<Token<'a>>,
     estimated_size: usize,
 }
 
 impl<'a> Template<'a> {
-    /// Parse a template string into a reusable Template
+    /// Parse a template string.
     #[inline]
     pub fn new(template: &'a str) -> Self {
         let tokens = parse(template);
@@ -25,6 +26,8 @@ impl<'a> Template<'a> {
 
     /// Render the template with the given registry and context
     pub fn render(&self, registry: &ModuleRegistry, context: &ModuleContext) -> Result<String> {
+        validate_module_occurrences(&self.tokens)?;
+
         let mut output = String::with_capacity(self.estimated_size);
 
         let no_color = global_no_color() || !IsTerminal::is_terminal(&std::io::stdout());
@@ -88,5 +91,48 @@ impl<'a> Template<'a> {
     /// Get the number of tokens in this template
     pub fn token_count(&self) -> usize {
         self.tokens.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::error::PromptError;
+    use crate::module_trait::Module;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct CountingModule {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl Module for CountingModule {
+        fn render(&self, _format: &str, _context: &ModuleContext) -> Result<Option<String>> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Some("value".to_string()))
+        }
+    }
+
+    #[test]
+    fn duplicate_singleton_is_rejected_before_rendering() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut registry = ModuleRegistry::new();
+        registry.register(
+            "test",
+            Arc::new(CountingModule {
+                calls: Arc::clone(&calls),
+            }),
+        );
+        let template = Template::new("{test}{test}");
+
+        let error = template
+            .render(&registry, &ModuleContext::default())
+            .expect_err("duplicate module should fail");
+
+        assert!(matches!(
+            error,
+            PromptError::DuplicateModule(module) if module == "test"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }

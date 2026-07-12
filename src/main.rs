@@ -10,7 +10,6 @@ use std::time::{Duration, Instant};
 mod detector;
 mod error;
 mod executor;
-mod memo;
 mod module_trait;
 mod modules;
 mod parser;

@@ -144,6 +144,7 @@ pub fn render_template(
     no_color: bool,
 ) -> Result<String> {
     let tokens = parse(template);
+    validate_module_occurrences(&tokens)?;
     render_tokens(tokens, registry, context, no_color, template.len(), None)
 }
 
@@ -408,7 +409,11 @@ fn build_registry(tokens: &[Token<'_>]) -> Result<ModuleRegistry> {
     for token in tokens {
         if let Token::Placeholder(params) = token {
             let name: &str = &params.module;
-            if required.insert(name) {
+            let first_occurrence = required.insert(name);
+            if !first_occurrence && !module_allows_multiple(name) {
+                return Err(PromptError::DuplicateModule(name.to_string()));
+            }
+            if first_occurrence {
                 let module = instantiate_module(name)
                     .ok_or_else(|| PromptError::UnknownModule(name.to_string()))?;
                 registry.register(name.to_string(), module);
@@ -417,6 +422,25 @@ fn build_registry(tokens: &[Token<'_>]) -> Result<ModuleRegistry> {
     }
 
     Ok(registry)
+}
+
+pub(crate) fn validate_module_occurrences(tokens: &[Token<'_>]) -> Result<()> {
+    let mut seen: HashSet<&str> = HashSet::new();
+
+    for token in tokens {
+        if let Token::Placeholder(params) = token {
+            let name: &str = &params.module;
+            if !module_allows_multiple(name) && !seen.insert(name) {
+                return Err(PromptError::DuplicateModule(name.to_string()));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn module_allows_multiple(name: &str) -> bool {
+    matches!(name, "env" | "json")
 }
 
 fn instantiate_module(name: &str) -> Option<ModuleRef> {
@@ -743,5 +767,26 @@ mod tests {
             Err(PromptError::InvalidFormat { module, format, .. })
                 if module == "err" && format == "bad"
         ));
+    }
+
+    #[test]
+    fn duplicate_singleton_module_returns_error() {
+        let tokens = parse("{path}{path::s}");
+        let error = match build_registry(&tokens) {
+            Ok(_) => panic!("expected duplicate module error"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            PromptError::DuplicateModule(module) if module == "path"
+        ));
+    }
+
+    #[test]
+    fn parameterized_modules_allow_multiple_occurrences() {
+        let tokens = parse("{env::USER}{env::HOSTNAME}{json::.a}{json::.b}");
+
+        assert!(build_registry(&tokens).is_ok());
     }
 }

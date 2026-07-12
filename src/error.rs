@@ -5,6 +5,9 @@ pub enum PromptError {
     #[error("Unknown module: {0}")]
     UnknownModule(String),
 
+    #[error("Module '{0}' may only appear once per template")]
+    DuplicateModule(String),
+
     #[error("Module '{0}' panicked while rendering")]
     ModulePanic(String),
 

@@ -1,5 +1,4 @@
 use crate::error::Result;
-use crate::memo::{PYTHON_VERSION, memoized_version};
 use crate::module_trait::{Module, ModuleContext};
 use crate::modules::utils;
 use std::process::Command;
@@ -42,11 +41,11 @@ impl Module for PythonModule {
         // Validate and normalize format
         let normalized_format = utils::validate_version_format(format, "python")?;
 
-        let version = match memoized_version(&PYTHON_VERSION, get_python_version) {
+        let version = match get_python_version() {
             Some(v) => v,
             None => return Ok(None),
         };
-        let version_str = version.as_ref();
+        let version_str = version.as_str();
 
         match normalized_format {
             "full" => Ok(Some(version_str.to_string())),

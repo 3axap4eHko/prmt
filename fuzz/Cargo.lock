@@ -1518,7 +1518,7 @@ dependencies = [
 
 [[package]]
 name = "prmt"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bitflags",
  "dirs",
@@ -1527,7 +1527,6 @@ dependencies = [
  "lexopt",
  "libc",
  "memchr",
- "once_cell",
  "serde_json",
  "thiserror",
  "toml",

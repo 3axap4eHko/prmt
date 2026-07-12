@@ -1789,7 +1789,6 @@ dependencies = [
  "lexopt",
  "libc",
  "memchr",
- "once_cell",
  "regex",
  "serde_json",
  "serial_test",

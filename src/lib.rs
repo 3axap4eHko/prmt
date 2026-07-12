@@ -1,7 +1,6 @@
 pub mod detector;
 pub mod error;
 mod executor;
-pub mod memo;
 pub mod module_trait;
 pub mod modules;
 pub mod parser;

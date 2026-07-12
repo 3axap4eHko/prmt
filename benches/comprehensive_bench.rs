@@ -184,62 +184,6 @@ fn bench_end_to_end_scenarios(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_memo_effectiveness(c: &mut Criterion) {
-    let mut group = c.benchmark_group("memo_effectiveness");
-
-    // First call (nothing memoized)
-    group.bench_function("git_cold_memo", |b| {
-        use prmt::Module;
-        use prmt::modules::git::GitModule;
-
-        let module = GitModule;
-        let context = ctx(false, None, &[".git"]);
-
-        b.iter(|| {
-            // Clear memo would go here if we had a method for it
-            module.render(black_box("full"), black_box(&context))
-        });
-    });
-
-    // Warm memo
-    group.bench_function("git_warm_memo", |b| {
-        use prmt::Module;
-        use prmt::modules::git::GitModule;
-
-        let module = GitModule;
-        let context = ctx(false, None, &[".git"]);
-
-        // Warm the memoized value
-        let _ = module.render("full", &context);
-
-        b.iter(|| module.render(black_box("full"), black_box(&context)));
-    });
-
-    // Version module cold
-    group.bench_function("rust_version_cold", |b| {
-        use prmt::Module;
-        use prmt::modules::rust::RustModule;
-
-        let module = RustModule;
-        let context = ctx(false, None, &["Cargo.toml"]);
-
-        b.iter(|| module.render(black_box("full"), black_box(&context)));
-    });
-
-    // Version module with no_version flag
-    group.bench_function("rust_no_version_flag", |b| {
-        use prmt::Module;
-        use prmt::modules::rust::RustModule;
-
-        let module = RustModule;
-        let context = ctx(true, None, &["Cargo.toml"]);
-
-        b.iter(|| module.render(black_box("full"), black_box(&context)));
-    });
-
-    group.finish();
-}
-
 fn bench_string_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("string_operations");
 
@@ -348,7 +292,6 @@ criterion_group!(
     bench_parser_scenarios,
     bench_template_rendering,
     bench_end_to_end_scenarios,
-    bench_memo_effectiveness,
     bench_string_operations,
     bench_style_parsing,
     bench_worst_case_scenarios

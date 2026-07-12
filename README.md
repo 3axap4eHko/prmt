@@ -302,6 +302,8 @@ prmt '{path:cyan} {time:dim:12h}' # ~/projects 02:30PM (with styling)
 {module::type::suffix}        - No style, specific type, suffix only
 ```
 
+Each module may appear once per template. The parameterized `env` and `json` modules may appear multiple times because each occurrence can request a different value.
+
 ### Available Modules
 
 | Module | Detection | Description |
@@ -447,12 +449,12 @@ Examples: `#ffffff+#333333`, `+blue`, `cyan+#222.dim`
 
 | Scenario | Time (µs) | Notes |
 |----------|-----------|-------|
-| Minimal render | 0.69 | `{path}` only |
-| Typical prompt | 1.71 | `{path} {git} {ok}{fail}` |
-| Full prompt with versions | 4.90 | `{path} {git} {rust} {node}` |
-| End-to-end (typical) | 2.53 | `prmt` binary execution |
+| Minimal render | 1.57 | `{path}` only |
+| Typical prompt | 2,820.45 | `{path} {git} {ok}` |
+| Full prompt with versions | 8,617.75 | `{path} {rust} {node} {git}` |
+| In-process execute (typical) | 2,820.93 | Library `execute` call |
 
-> Measurements captured on an Intel Core i9-13900K host with project files on a SATA SSD (Rust 1.90.0 release build). Each value is the median of 100 `cargo bench` runs.
+> Measurements captured on an Intel Core i9-13900K host with project files on a SATA SSD (Rust 1.96.0 release build). Each value is the median of 100 `cargo bench` samples.
 
 ### Prompt Timeout
 
