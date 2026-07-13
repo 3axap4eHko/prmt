@@ -1,6 +1,6 @@
 [package]
 name = "prmt"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 authors = ["Ivan Zakharchanka <3axap4eHko@gmail.com>"]
 description = "Ultra-fast, customizable shell prompt generator with zero-copy parsing"
@@ -29,7 +29,7 @@ harness = false
 
 [dependencies]
 lexopt = "0.3"
-gix  = { version = "0.81.0", optional = true, default-features = false, features = ["parallel", "revision", "sha1", "status"] }
+gix  = { version = "0.85.0", optional = true, default-features = false, features = ["parallel", "revision", "sha1", "status"] }
 dirs = "6"
 memchr = "2"
 is-terminal = "0.4"
