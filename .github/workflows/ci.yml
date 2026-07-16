@@ -19,10 +19,10 @@ jobs:
                 os: [ubuntu-latest, windows-latest, macos-latest]
                 rust: [stable]
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Install Rust
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master 2026-06-30
               with:
                   toolchain: ${{ matrix.rust }}
                   components: rustfmt, clippy
@@ -66,10 +66,10 @@ jobs:
         name: Check MSRV
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Install Rust
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master 2026-06-30
               with:
                   toolchain: stable
 
@@ -80,15 +80,18 @@ jobs:
         name: Code Coverage
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Install Rust stable
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master 2026-06-30
               with:
+                  toolchain: stable
                   components: llvm-tools-preview
 
             - name: Install cargo-llvm-cov
-              uses: taiki-e/install-action@cargo-llvm-cov
+              uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2.83.2
+              with:
+                  tool: cargo-llvm-cov
 
             - name: Generate coverage
               run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
@@ -104,10 +107,12 @@ jobs:
         name: Benchmarks
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Install Rust stable
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master 2026-06-30
+              with:
+                  toolchain: stable
 
             - name: Run benchmarks
               run: cargo bench --no-run
@@ -116,7 +121,7 @@ jobs:
         name: Security Audit
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v5
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
             - name: Install cargo-audit
               run: cargo install cargo-audit
