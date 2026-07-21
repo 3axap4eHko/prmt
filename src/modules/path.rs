@@ -127,6 +127,22 @@ fn normalize_relative_path(current_dir: &Path) -> String {
     normalize_separators(current_dir.to_string_lossy().to_string())
 }
 
+fn normalize_git_path(current_dir: &Path) -> Option<String> {
+    let repo_root = current_dir
+        .ancestors()
+        .find(|directory| matches!(directory.join(".git").try_exists(), Ok(true)))?;
+    let repo_name = repo_root.file_name()?;
+    let relative = current_dir.strip_prefix(repo_root).ok()?;
+
+    let mut result = repo_name.to_string_lossy().into_owned();
+    if !relative.as_os_str().is_empty() {
+        result.push(std::path::MAIN_SEPARATOR);
+        result.push_str(&relative.to_string_lossy());
+    }
+
+    Some(normalize_separators(result))
+}
+
 impl Module for PathModule {
     fn render(&self, format: &str, context: &ModuleContext) -> Result<Option<String>> {
         let Some(current_dir) = context.current_dir() else {
@@ -135,6 +151,10 @@ impl Module for PathModule {
 
         match format {
             "" | "relative" | "r" => Ok(Some(normalize_relative_path(current_dir))),
+            "git" => Ok(Some(
+                normalize_git_path(current_dir)
+                    .unwrap_or_else(|| normalize_relative_path(current_dir)),
+            )),
             "absolute" | "a" | "f" => Ok(Some(current_dir.to_string_lossy().to_string())),
             "initials" | "i" => Ok(Some(transform_relative_path(
                 &normalize_relative_path(current_dir),
@@ -154,8 +174,9 @@ impl Module for PathModule {
             _ => Err(PromptError::InvalidFormat {
                 module: "path".to_string(),
                 format: format.to_string(),
-                valid_formats: "relative, r, absolute, a, f, initials, i, unvowel, u, short, s"
-                    .to_string(),
+                valid_formats:
+                    "relative, r, git, absolute, a, f, initials, i, unvowel, u, short, s"
+                        .to_string(),
             }),
         }
     }
@@ -273,6 +294,46 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn git_path_keeps_repository_name_at_root() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let repo = temp.path().join("prmt");
+        fs::create_dir_all(repo.join(".git")).expect("create repository marker");
+
+        assert_eq!(normalize_git_path(&repo).as_deref(), Some("prmt"));
+    }
+
+    #[test]
+    fn git_path_keeps_repository_name_and_nested_path() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let repo = temp.path().join("prmt");
+        let nested = repo.join("src/modules");
+        fs::create_dir_all(repo.join(".git")).expect("create repository marker");
+        fs::create_dir_all(&nested).expect("create nested path");
+
+        assert_eq!(
+            normalize_git_path(&nested).as_deref(),
+            Some("prmt/src/modules")
+        );
+    }
+
+    #[test]
+    fn git_format_falls_back_to_relative_path_outside_repository() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let module = PathModule::new();
+        let context = ModuleContext {
+            cwd: Some(temp.path().to_path_buf()),
+            ..ModuleContext::default()
+        };
+
+        let value = module
+            .render("git", &context)
+            .expect("render")
+            .expect("some");
+
+        assert_eq!(value, normalize_relative_path(temp.path()));
     }
 
     #[test]

@@ -225,6 +225,7 @@ prmt '{path} {rust} {git}'
 # Format with types and styles
 prmt '{path::a}'                  # /home/user/projects (absolute path)
 prmt '{path::r}'                  # ~/projects (relative with ~)
+prmt '{path::git}'                # projects/src (relative to Git repository parent)
 prmt '{path::i}'                  # ~/p/projects (parent initials, last segment preserved)
 prmt '{path::u}'                  # ~/prjcts (interior vowels stripped)
 prmt '{path::s}'                  # projects (short - last dir only)
@@ -332,6 +333,7 @@ Each module may appear once per template. The parameterized `env` and `json` mod
 
 **Path module**:
 - `relative` or `r` - Path with ~ for home directory (default)
+- `git` - Path from the Git repository directory, falling back to `relative` outside a repository
 - `absolute`, `a`, or `f` - Full absolute path without ~ substitution
 - `initials` or `i` - Parent segments shortened to their first character; last segment kept full (hidden dirs keep the leading `.`)
 - `unvowel` or `u` - Interior vowels stripped from each segment; first character kept; segments ≤ 3 chars unchanged
@@ -393,7 +395,7 @@ prmt '{fail::code}'     # ✓ Valid (shows exit code)
 
 # Invalid types produce clear errors
 prmt '{path::major}'
-# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, absolute, a, f, initials, i, unvowel, u, short, s
+# Error: Invalid type 'major' for module 'path'. Valid types: relative, r, git, absolute, a, f, initials, i, unvowel, u, short, s
 
 prmt '{git::major}'
 # Error: Invalid type 'major' for module 'git'. Valid types: full, short
