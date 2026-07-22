@@ -1,20 +1,26 @@
 name: OpenWrt
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
   workflow_run:
     workflows: [ "Release" ]
     types: [ completed ]
 
 jobs:
   ipk:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:x86_64-openwrt-23.05 }
-          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:armvirt-64-openwrt-23.05 }
-          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk:arm-cortex-a7_neon-vfpv4-openwrt-23.05 }
+          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:857329c75dcba07d05842eb8a0921d03514d5655c75f7514014f1d64cd8b00f8 }
+          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:cb68f1a921301060ec9cc23adce8cc49131c9564464b66c837d06737d80b0084 }
+          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:9c67abc1154f0be7559c759c20fa55daa01477ad2fce0b05e557745de56b71ec }
     container:
       image: ${{ matrix.sdk }}
       options: --user root
@@ -24,16 +30,17 @@ jobs:
       - name: Resolve release metadata
         id: meta
         env:
+          MANUAL_TAG: ${{ inputs.tag }}
           RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          set -euo pipefail
+          set -eu
           git fetch --force --tags
-          tag="${RUN_HEAD_BRANCH}"
-          if [[ -z "$tag" ]]; then
+          tag="${MANUAL_TAG:-$RUN_HEAD_BRANCH}"
+          if [ -z "$tag" ]; then
             tag="$(git tag --points-at "$RUN_HEAD_SHA" | head -n1)"
           fi
-          if [[ -z "$tag" ]]; then
+          if [ -z "$tag" ]; then
             echo "Unable to determine tag for ${RUN_HEAD_SHA}" >&2
             exit 1
           fi
@@ -46,7 +53,7 @@ jobs:
           REPO: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euxo pipefail
+          set -eux
           mkdir -p /work && cd /work
           file="prmt-${{ matrix.target }}-${{ matrix.asset_os }}.tar.gz"
           curl -sSfL -H "Authorization: Bearer ${GITHUB_TOKEN}" -o "$file" \
@@ -63,7 +70,7 @@ jobs:
           REPO: ${{ github.repository }}
           ARCH: ${{ matrix.arch }}
         run: |
-          set -euxo pipefail
+          set -eux
           cd /work
           d=$(find . -maxdepth 1 -type d -name 'prmt-*' | head -n1)
           test -n "$d"

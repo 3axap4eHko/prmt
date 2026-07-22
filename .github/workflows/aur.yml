@@ -1,14 +1,23 @@
 name: AUR
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+        type: string
   workflow_run:
     workflows: [ "Release" ]
     types: [ completed ]
 
 jobs:
   pkgbuild:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
-    container: archlinux:latest
+    container: archlinux@sha256:592e11bd99ab579f933a0cb77a8f66e2f3ae57f5eafacf13aea44a6e98ef21ae
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Prepare Arch toolchain
         run: |
@@ -27,12 +36,13 @@ jobs:
       - name: Resolve release metadata
         id: meta
         env:
+          MANUAL_TAG: ${{ inputs.tag }}
           RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
           git fetch --force --tags
-          tag="${RUN_HEAD_BRANCH}"
+          tag="${MANUAL_TAG:-$RUN_HEAD_BRANCH}"
           if [[ -z "$tag" ]]; then
             tag="$(git tag --points-at "$RUN_HEAD_SHA" | head -n1)"
           fi
@@ -94,8 +104,8 @@ jobs:
           sha256sums_armv7h=('${SHA256_ARMV7H}')
           package() {
             tar -xzf prmt-*.tar.gz
-            install -Dm755 prmt*/prmt "$pkgdir/usr/bin/prmt"
-            install -Dm644 prmt*/LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+            install -Dm755 prmt*/prmt "\$pkgdir/usr/bin/prmt"
+            install -Dm644 prmt*/LICENSE "\$pkgdir/usr/share/licenses/\$pkgname/LICENSE"
           }
           EOF
           chown builder:builder PKGBUILD
