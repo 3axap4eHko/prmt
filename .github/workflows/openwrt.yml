@@ -18,11 +18,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:857329c75dcba07d05842eb8a0921d03514d5655c75f7514014f1d64cd8b00f8 }
-          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:cb68f1a921301060ec9cc23adce8cc49131c9564464b66c837d06737d80b0084 }
-          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04, sdk: ghcr.io/openwrt/sdk@sha256:9c67abc1154f0be7559c759c20fa55daa01477ad2fce0b05e557745de56b71ec }
+          - { arch: x86_64,              target: x86_64-unknown-linux-musl,      asset_os: ubuntu-24.04 }
+          - { arch: aarch64_cortex-a53,  target: aarch64-unknown-linux-musl,     asset_os: ubuntu-24.04 }
+          - { arch: arm_cortex-a7,       target: armv7-unknown-linux-musleabihf, asset_os: ubuntu-24.04 }
     container:
-      image: ${{ matrix.sdk }}
+      image: ghcr.io/openwrt/sdk@sha256:cb68f1a921301060ec9cc23adce8cc49131c9564464b66c837d06737d80b0084
       options: --user root
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -92,7 +92,7 @@ jobs:
             printf 'Description: Ultra-fast customizable shell prompt (static Rust binary)\n'
           } > ./pkg/CONTROL/control
 
-          ipkg-build -o root -g root ./pkg
+          /builder/scripts/ipkg-build -o root -g root ./pkg
           mkdir -p /out
           mv *.ipk /out/
 
